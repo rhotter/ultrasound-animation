@@ -40,7 +40,6 @@ interface PulseWave {
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const WAVE_SPEED = 2.6
-const ECHO_SPEED = 2.6
 const PROBE_TOP_FRAC = 0.12
 const PROBE_BOT_FRAC = 0.88
 const PROBE_FACE_X = 175
@@ -555,7 +554,7 @@ export default function UltrasoundSimulation() {
 
       for (let i = s.echoes.length - 1; i >= 0; i--) {
         const e = s.echoes[i]
-        e.radius += ECHO_SPEED
+        e.radius += WAVE_SPEED
         e.opacity = Math.max(0, 0.9 - (s.time - e.birthTime) * 0.12)
         if (e.opacity < 0.02 || e.radius > w * 1.5) {
           s.echoes.splice(i, 1)
