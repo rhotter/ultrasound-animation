@@ -47,7 +47,6 @@ const PROBE_HOUSING_WIDTH = 32
 const PROBE_BODY_WIDTH = 46
 const PULSE_WIDTH = 3
 const NUM_ELEMENTS = 32
-const RESTART_DELAY = 1800
 const SKULL_THICKNESS = 28
 const SKULL_LEFT = PROBE_FACE_X + 4
 const SKULL_RIGHT = SKULL_LEFT + SKULL_THICKNESS
@@ -102,8 +101,8 @@ export default function UltrasoundSimulation() {
     time: number
     initialized: boolean
     dims: { w: number; h: number }
-    restartTimer: number | null
     elementActivations: number[]
+    hintOpacity: number
   }>({
     vessels: [],
     rbcs: [],
@@ -112,8 +111,8 @@ export default function UltrasoundSimulation() {
     time: 0,
     initialized: false,
     dims: { w: 0, h: 0 },
-    restartTimer: null,
     elementActivations: new Array(NUM_ELEMENTS).fill(0),
+    hintOpacity: 1,
   })
 
   const buildVessels = useCallback((w: number, h: number): Vessel[] => {
@@ -513,14 +512,21 @@ export default function UltrasoundSimulation() {
     resize()
     window.addEventListener("resize", resize)
 
-    const restartPulse = () => {
+    const firePulse = () => {
       const s = stateRef.current
+      if (!s.initialized) return
       for (const rbc of s.rbcs) { rbc.hit = false; rbc.hitTime = 0 }
       s.echoes = []
       s.pulse = { x: PROBE_FACE_X, opacity: 1, active: true }
       s.elementActivations.fill(0)
-      s.restartTimer = null
+      s.hintOpacity = 0
     }
+
+    const onKey = (e: KeyboardEvent) => { if (e.code === "Space") { e.preventDefault(); firePulse() } }
+    const onClick = () => firePulse()
+    window.addEventListener("keydown", onKey)
+    canvas.addEventListener("click", onClick)
+    canvas.addEventListener("touchstart", onClick, { passive: true })
 
     const animate = (timestamp: number) => {
       const s = stateRef.current
@@ -596,8 +602,9 @@ export default function UltrasoundSimulation() {
         }
       }
 
-      if (!s.pulse.active && s.echoes.length === 0 && !s.restartTimer) {
-        s.restartTimer = window.setTimeout(restartPulse, RESTART_DELAY)
+      // Fade hint after echoes finish
+      if (!s.pulse.active && s.echoes.length === 0 && s.hintOpacity < 1) {
+        s.hintOpacity = Math.min(1, s.hintOpacity + dt * 0.4)
       }
 
       // ─── DRAW ──────────────────────────────────────────────────
@@ -816,15 +823,29 @@ export default function UltrasoundSimulation() {
         }
       }
 
+      // Subtle interaction hint
+      if (s.hintOpacity > 0.01) {
+        ctx.save()
+        ctx.globalAlpha = s.hintOpacity * 0.45
+        ctx.font = "400 13px system-ui, sans-serif"
+        ctx.textAlign = "center"
+        ctx.textBaseline = "bottom"
+        ctx.fillStyle = "#94a3b8"
+        ctx.fillText("Space / tap to pulse", w / 2, h - 16)
+        ctx.restore()
+      }
+
       animFrameRef.current = requestAnimationFrame(animate)
     }
 
     animFrameRef.current = requestAnimationFrame(animate)
 
     return () => {
+      window.removeEventListener("keydown", onKey)
+      canvas.removeEventListener("click", onClick)
+      canvas.removeEventListener("touchstart", onClick)
       window.removeEventListener("resize", resize)
       cancelAnimationFrame(animFrameRef.current)
-      if (stateRef.current.restartTimer) clearTimeout(stateRef.current.restartTimer)
     }
   }, [buildVessels, buildRBCs, renderStatic])
 
