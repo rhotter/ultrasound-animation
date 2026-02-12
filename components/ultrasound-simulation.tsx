@@ -109,66 +109,61 @@ export default function UltrasoundSimulation() {
     const overflow = 100
     const brainLeft = SKULL_RIGHT + 10
 
-    // Middle cerebral artery: enters from top, sharp downward ~70° curve, exits right-middle
+    // Upper vessel: enters from far top-left, diagonal downward-right, stays upper, exits right
     {
       const pts: { x: number; y: number }[] = []
       for (let i = 0; i <= 50; i++) {
         const frac = i / 50
-        const x = brainLeft + frac * (w - brainLeft + overflow)
-        // Sharp downward angle: start high, steep descent
-        const y = -overflow * 0.6 + frac * h * 0.7 + Math.sin(frac * Math.PI * 2.8) * h * 0.1
-        pts.push({ x, y })
-      }
-      vessels.push({ points: pts, radius: h * 0.04, flowSpeed: 0.0003 })
-    }
-
-    // Anterior cerebral: enters from far bottom-left, sharp upward ~75° curve, exits top
-    {
-      const pts: { x: number; y: number }[] = []
-      for (let i = 0; i <= 50; i++) {
-        const frac = i / 50
-        const x = brainLeft - overflow * 0.4 + frac * (w - brainLeft + overflow * 1.3)
-        // Sharp upward angle from bottom
-        const y = h + overflow * 0.6 - frac * (h * 1.1 + overflow * 0.8) + Math.sin(frac * Math.PI * 2.6) * h * 0.08
+        const x = brainLeft - overflow * 0.6 + frac * (w - brainLeft + overflow * 1.2)
+        const y = -overflow + frac * h * 0.35 + Math.sin(frac * Math.PI * 2.4) * h * 0.08
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.025, flowSpeed: 0.00018 })
     }
 
-    // Posterior cerebral: enters from top-right, sharp downward ~80° curve, exits bottom
+    // Middle-upper: enters from left off-screen at upper-middle, horizontal-right, exits right-upper
     {
       const pts: { x: number; y: number }[] = []
       for (let i = 0; i <= 50; i++) {
         const frac = i / 50
-        const x = w * 0.35 + frac * (w * 0.55 + overflow * 0.8)
-        // Steepest downward angle from top
-        const y = -overflow * 0.5 + frac * (h * 1.05 + overflow * 0.7) + Math.sin(frac * Math.PI * 2.2 + 1) * h * 0.09
+        const x = brainLeft - overflow * 0.3 + frac * (w - brainLeft + overflow)
+        const y = h * 0.25 + frac * h * 0.08 + Math.sin(frac * Math.PI * 3) * h * 0.06
+        pts.push({ x, y })
+      }
+      vessels.push({ points: pts, radius: h * 0.04, flowSpeed: 0.0003 })
+    }
+
+    // Middle vessel: enters from bottom-left far off, sharp diagonal up-right, exits top-right
+    {
+      const pts: { x: number; y: number }[] = []
+      for (let i = 0; i <= 50; i++) {
+        const frac = i / 50
+        const x = brainLeft - overflow * 0.7 + frac * (w - brainLeft + overflow * 1.4)
+        const y = h + overflow * 0.7 - frac * (h * 0.95 + overflow * 0.9) + Math.sin(frac * Math.PI * 2.6) * h * 0.07
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.028, flowSpeed: 0.00022 })
     }
 
-    // Upper arteriole: enters from far bottom, sharp upward ~75° curve, exits top-right
+    // Middle-lower: enters from left at lower-middle, horizontal-right, exits right-lower
     {
       const pts: { x: number; y: number }[] = []
-      for (let i = 0; i <= 45; i++) {
-        const frac = i / 45
-        const x = brainLeft - overflow * 0.5 + frac * (w - brainLeft + overflow * 1.2)
-        // Very steep upward angle
-        const y = h + overflow * 0.4 - frac * (h * 0.95 + overflow * 0.5) + Math.sin(frac * Math.PI * 3) * h * 0.06
+      for (let i = 0; i <= 50; i++) {
+        const frac = i / 50
+        const x = brainLeft - overflow * 0.2 + frac * (w - brainLeft + overflow)
+        const y = h * 0.68 + frac * h * 0.12 + Math.sin(frac * Math.PI * 2.8) * h * 0.07
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.015, flowSpeed: 0.00012 })
     }
 
-    // Lower arteriole: enters from top-right, sharp downward ~70° curve, exits bottom-right
+    // Lower vessel: enters from far bottom-left, diagonal upward-right, stays lower, exits right-bottom
     {
       const pts: { x: number; y: number }[] = []
-      for (let i = 0; i <= 45; i++) {
-        const frac = i / 45
-        const x = w * 0.4 + frac * (w * 0.5 + overflow * 0.7)
-        // Sharp downward angle
-        const y = -overflow * 0.4 + frac * (h * 0.9 + overflow * 0.6) + Math.sin(frac * Math.PI * 2.4 + 1) * h * 0.07
+      for (let i = 0; i <= 50; i++) {
+        const frac = i / 50
+        const x = brainLeft - overflow * 0.5 + frac * (w - brainLeft + overflow * 1.1)
+        const y = h + overflow * 0.5 - frac * h * 0.25 + Math.sin(frac * Math.PI * 2.2) * h * 0.08
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.016, flowSpeed: 0.00015 })
