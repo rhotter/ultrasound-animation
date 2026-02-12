@@ -39,8 +39,8 @@ interface PulseWave {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const WAVE_SPEED = 2.4
-const ECHO_SPEED = 1.8
+const WAVE_SPEED = 3.6
+const ECHO_SPEED = 2.8
 const PROBE_TOP_FRAC = 0.08
 const PROBE_BOT_FRAC = 0.92
 const PROBE_FACE_X = 60
@@ -208,7 +208,7 @@ export default function UltrasoundSimulation() {
         )
         pts.push({ x, y })
       }
-      vessels.push({ points: pts, radius: h * 0.04, flowSpeed: 0.0008 })
+      vessels.push({ points: pts, radius: h * 0.04, flowSpeed: 0.0003 })
     }
 
     // Anterior cerebral artery (upper, more tortuous)
@@ -225,7 +225,7 @@ export default function UltrasoundSimulation() {
         )
         pts.push({ x, y })
       }
-      vessels.push({ points: pts, radius: h * 0.025, flowSpeed: 0.0005 })
+      vessels.push({ points: pts, radius: h * 0.025, flowSpeed: 0.00018 })
     }
 
     // Posterior cerebral artery (lower)
@@ -242,7 +242,7 @@ export default function UltrasoundSimulation() {
         )
         pts.push({ x, y })
       }
-      vessels.push({ points: pts, radius: h * 0.028, flowSpeed: 0.0006 })
+      vessels.push({ points: pts, radius: h * 0.028, flowSpeed: 0.00022 })
     }
 
     // Branching arteriole (ascending from middle)
@@ -258,7 +258,7 @@ export default function UltrasoundSimulation() {
         )
         pts.push({ x, y })
       }
-      vessels.push({ points: pts, radius: h * 0.015, flowSpeed: 0.00035 })
+      vessels.push({ points: pts, radius: h * 0.015, flowSpeed: 0.00012 })
     }
 
     // Branching arteriole (descending from middle)
@@ -274,7 +274,7 @@ export default function UltrasoundSimulation() {
         )
         pts.push({ x, y })
       }
-      vessels.push({ points: pts, radius: h * 0.016, flowSpeed: 0.0004 })
+      vessels.push({ points: pts, radius: h * 0.016, flowSpeed: 0.00015 })
     }
 
     return vessels
