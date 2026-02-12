@@ -275,7 +275,7 @@ export default function UltrasoundSimulation() {
       const probeBot = h * PROBE_BOT_FRAC
       const probeH = probeBot - probeTop
 
-      // ─── Move RBCs ─────────────────────────────────────────────
+      // ─── Move RBCs ───────────────────────────────────────��─────
       for (const rbc of s.rbcs) {
         rbc.t += rbc.speed
         if (rbc.t > 1) rbc.t -= 1
@@ -503,7 +503,7 @@ export default function UltrasoundSimulation() {
         }
       }
 
-      // ─── Incident pulse wavefront ────────────��────────────────
+      // ─── Incident pulse wavefront ────��───────��────────────────
       if (s.pulse.active && s.pulse.x > PROBE_FACE_X) {
         ctx.save()
         ctx.globalAlpha = s.pulse.opacity
@@ -699,15 +699,15 @@ export default function UltrasoundSimulation() {
       ctx.textBaseline = "middle"
 
       const labelX = (bodyLeft + housingLeft) / 2
-      const labelY = probeBot + 28
+      const labelY = probeTop - 30
 
-      // Leader line from probe body down
+      // Leader line from probe body up
       ctx.strokeStyle = "rgba(56,189,248,0.3)"
       ctx.lineWidth = 0.8
       ctx.setLineDash([3, 2])
       ctx.beginPath()
-      ctx.moveTo(labelX, probeBot + 6)
-      ctx.lineTo(labelX, labelY - 10)
+      ctx.moveTo(labelX, probeTop - 6)
+      ctx.lineTo(labelX, labelY + 12)
       ctx.stroke()
       ctx.setLineDash([])
 
