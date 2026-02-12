@@ -716,35 +716,36 @@ export default function UltrasoundSimulation() {
         ctx.stroke()
         ctx.setLineDash([])
 
-        // "Temporal Bone" label
+        // "Skull" label -- bottom-right of the skull to avoid overlapping transducer label
         ctx.save()
         ctx.font = "600 10px system-ui, sans-serif"
-        ctx.textAlign = "center"
+        ctx.textAlign = "left"
         ctx.textBaseline = "middle"
-        const boneLabelX = SKULL_LEFT + SKULL_THICKNESS / 2
-        const boneLabelY = skullTop - 16
+        const boneLabelX = SKULL_RIGHT + 10
+        const boneLabelY = h - 22
 
+        // Leader line from skull edge to label
         ctx.strokeStyle = "rgba(200,180,150,0.35)"
         ctx.lineWidth = 0.8
         ctx.setLineDash([3, 2])
         ctx.beginPath()
-        ctx.moveTo(boneLabelX, skullTop - 2)
-        ctx.lineTo(boneLabelX, boneLabelY + 8)
+        ctx.moveTo(SKULL_RIGHT, boneLabelY)
+        ctx.lineTo(boneLabelX - 4, boneLabelY)
         ctx.stroke()
         ctx.setLineDash([])
 
-        const boneText = "Temporal Bone"
+        const boneText = "Skull"
         const boneTm = ctx.measureText(boneText)
         const bpx = 6
         const bpy = 3
         ctx.fillStyle = "rgba(10,8,10,0.9)"
         ctx.beginPath()
-        ctx.roundRect(boneLabelX - boneTm.width / 2 - bpx, boneLabelY - 6 - bpy, boneTm.width + bpx * 2, 12 + bpy * 2, 3)
+        ctx.roundRect(boneLabelX - bpx, boneLabelY - 6 - bpy, boneTm.width + bpx * 2, 12 + bpy * 2, 3)
         ctx.fill()
         ctx.strokeStyle = "rgba(200,180,150,0.4)"
         ctx.lineWidth = 0.8
         ctx.beginPath()
-        ctx.roundRect(boneLabelX - boneTm.width / 2 - bpx, boneLabelY - 6 - bpy, boneTm.width + bpx * 2, 12 + bpy * 2, 3)
+        ctx.roundRect(boneLabelX - bpx, boneLabelY - 6 - bpy, boneTm.width + bpx * 2, 12 + bpy * 2, 3)
         ctx.stroke()
         ctx.fillStyle = "rgba(210,195,170,0.85)"
         ctx.fillText(boneText, boneLabelX, boneLabelY)
