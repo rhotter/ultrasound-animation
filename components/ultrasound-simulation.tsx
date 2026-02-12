@@ -40,7 +40,7 @@ interface PulseWave {
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const WAVE_SPEED = 2.6
-const ECHO_SPEED = 2.0
+const ECHO_SPEED = 2.6
 const PROBE_TOP_FRAC = 0.12
 const PROBE_BOT_FRAC = 0.88
 const PROBE_FACE_X = 175
