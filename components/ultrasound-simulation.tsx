@@ -104,81 +104,83 @@ export default function UltrasoundSimulation() {
 
   const buildVessels = useCallback((w: number, h: number): Vessel[] => {
     const vessels: Vessel[] = []
-    const overflow = 80 // extend beyond canvas edges
+    const overflow = 80
+    // Vessels start past the skull inner surface
+    const vesselStartX = SKULL_RIGHT + 8
 
-    // Middle cerebral artery -- extends edge to edge
+    // Middle cerebral artery -- enters from right, curves across middle, exits right
     {
       const pts: { x: number; y: number }[] = []
-      const cy = h * 0.45
+      const cy = h * 0.42
       for (let i = 0; i <= 50; i++) {
         const frac = i / 50
-        const x = -overflow + frac * (w + overflow * 2)
+        const x = vesselStartX + frac * (w - vesselStartX + overflow)
         const y =
           cy +
-          Math.sin(frac * Math.PI * 3) * h * 0.05 +
-          Math.cos(frac * Math.PI * 1.5) * h * 0.03
+          Math.sin(frac * Math.PI * 2) * h * 0.04 +
+          Math.cos(frac * Math.PI * 0.8) * h * 0.02
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.04, flowSpeed: 0.0003 })
     }
 
-    // Anterior cerebral artery -- extends edge to edge
+    // Anterior cerebral artery -- enters from right, curves up and off top edge
     {
       const pts: { x: number; y: number }[] = []
-      const cy = h * 0.22
       for (let i = 0; i <= 45; i++) {
         const frac = i / 45
-        const x = -overflow + frac * (w + overflow * 2)
+        const x = vesselStartX + frac * (w - vesselStartX + overflow)
+        // Starts at ~20%, curves gently upward, exits off top
         const y =
-          cy +
-          Math.sin(frac * Math.PI * 2.3 + 0.5) * h * 0.06 +
-          Math.sin(frac * Math.PI * 5) * h * 0.015
+          h * 0.2 -
+          frac * frac * h * 0.15 +
+          Math.sin(frac * Math.PI * 2.5) * h * 0.025
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.025, flowSpeed: 0.00018 })
     }
 
-    // Posterior cerebral artery -- extends edge to edge
+    // Posterior cerebral artery -- enters from right, curves down and off bottom
     {
       const pts: { x: number; y: number }[] = []
-      const cy = h * 0.73
       for (let i = 0; i <= 45; i++) {
         const frac = i / 45
-        const x = -overflow + frac * (w + overflow * 2)
+        const x = vesselStartX + frac * (w - vesselStartX + overflow)
+        // Starts at ~70%, curves gently downward, exits off bottom
         const y =
-          cy +
-          Math.sin(frac * Math.PI * 2.8 + 1) * h * 0.05 +
-          Math.cos(frac * Math.PI * 4.5) * h * 0.012
+          h * 0.68 +
+          frac * frac * h * 0.12 +
+          Math.sin(frac * Math.PI * 2 + 1) * h * 0.025
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.028, flowSpeed: 0.00022 })
     }
 
-    // Branching arteriole (ascending, crosses top edge)
+    // Small arteriole -- between anterior and middle, curves up off top
     {
       const pts: { x: number; y: number }[] = []
       for (let i = 0; i <= 35; i++) {
         const frac = i / 35
-        const x = -overflow * 0.5 + w * 0.15 + frac * (w * 0.9 + overflow)
+        const x = vesselStartX + w * 0.15 + frac * (w * 0.6 + overflow)
         const y =
-          h * 0.5 -
-          frac * h * 0.45 +
-          Math.sin(frac * Math.PI * 4) * h * 0.025
+          h * 0.3 -
+          frac * h * 0.25 +
+          Math.sin(frac * Math.PI * 3) * h * 0.02
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.015, flowSpeed: 0.00012 })
     }
 
-    // Branching arteriole (descending, crosses bottom edge)
+    // Small arteriole -- between middle and posterior, curves down off bottom
     {
       const pts: { x: number; y: number }[] = []
       for (let i = 0; i <= 35; i++) {
         const frac = i / 35
-        const x = -overflow * 0.5 + w * 0.2 + frac * (w * 0.85 + overflow)
+        const x = vesselStartX + w * 0.1 + frac * (w * 0.65 + overflow)
         const y =
-          h * 0.48 +
-          frac * h * 0.42 +
-          Math.sin(frac * Math.PI * 3 + 1) * h * 0.03
+          h * 0.58 +
+          frac * h * 0.22 +
+          Math.sin(frac * Math.PI * 2.5 + 1) * h * 0.02
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.016, flowSpeed: 0.00015 })
