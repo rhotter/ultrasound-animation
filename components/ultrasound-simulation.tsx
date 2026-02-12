@@ -105,6 +105,8 @@ export default function UltrasoundSimulation() {
     elementActivations: number[]
     hintOpacity: number
     probeHovered: boolean
+    portrait: boolean
+    screenH: number
   }>({
     vessels: [],
     rbcs: [],
@@ -117,6 +119,8 @@ export default function UltrasoundSimulation() {
     elementActivations: new Array(NUM_ELEMENTS).fill(0),
     hintOpacity: 1,
     probeHovered: false,
+    portrait: false,
+    screenH: 0,
   })
 
   const buildVessels = useCallback((w: number, h: number): Vessel[] => {
@@ -235,7 +239,7 @@ export default function UltrasoundSimulation() {
   }, [])
 
   // Pre-render static elements (skull, probe body) to an offscreen canvas
-  const renderStatic = useCallback((w: number, h: number, dpr: number) => {
+  const renderStatic = useCallback((w: number, h: number, dpr: number, portrait: boolean) => {
     if (!staticCanvasRef.current) {
       staticCanvasRef.current = document.createElement("canvas")
     }
@@ -322,6 +326,7 @@ export default function UltrasoundSimulation() {
     ctx.setLineDash([])
 
     // Skull label
+    if (!portrait) {
     ctx.save()
     ctx.font = "600 11px system-ui, sans-serif"
     ctx.textAlign = "left"
@@ -343,6 +348,7 @@ export default function UltrasoundSimulation() {
     ctx.fillStyle = "rgba(210,195,170,0.9)"
     ctx.fillText(skullText, skullLabelX, skullLabelY)
     ctx.restore()
+    }
 
     // Coupling gel
     const gelGrad = ctx.createLinearGradient(PROBE_FACE_X, 0, SKULL_LEFT, 0)
@@ -462,6 +468,7 @@ export default function UltrasoundSimulation() {
     }
 
     // Probe label
+    if (!portrait) {
     ctx.save()
     ctx.font = "600 11px system-ui, sans-serif"
     ctx.textAlign = "center"; ctx.textBaseline = "middle"
@@ -480,6 +487,7 @@ export default function UltrasoundSimulation() {
     ctx.fillStyle = "rgba(56,189,248,0.85)"
     ctx.fillText(probeLabel, labelX, labelY)
     ctx.restore()
+    }
 
     staticDirtyRef.current = false
   }, [])
@@ -500,11 +508,15 @@ export default function UltrasoundSimulation() {
       canvas.height = rect.height * currentDpr
       ctx.setTransform(currentDpr, 0, 0, currentDpr, 0, 0)
 
-      const w = rect.width
-      const h = rect.height
+      const screenW = rect.width
+      const screenH = rect.height
       const s = stateRef.current
-      s.dims = { w, h }
-      s.vessels = buildVessels(w, h)
+      s.portrait = screenH > screenW
+      s.screenH = screenH
+      const simW = s.portrait ? screenH : screenW
+      const simH = s.portrait ? screenW : screenH
+      s.dims = { w: simW, h: simH }
+      s.vessels = buildVessels(simW, simH)
       s.rbcs = buildRBCs()
       s.echoes = []
       s.pulses = [{ id: s.nextPulseId++, x: PROBE_FACE_X, opacity: 1 }]
@@ -525,12 +537,16 @@ export default function UltrasoundSimulation() {
 
     const isOverProbe = (clientX: number, clientY: number) => {
       const rect = canvas.getBoundingClientRect()
-      const x = clientX - rect.left
-      const y = clientY - rect.top
-      const h = rect.height
-      const probeTop = h * PROBE_TOP_FRAC - 6
-      const probeBot = h * PROBE_BOT_FRAC + 6
-      return x <= PROBE_FACE_X && y >= probeTop && y <= probeBot
+      const sx = clientX - rect.left
+      const sy = clientY - rect.top
+      const s = stateRef.current
+      // Map screen coords to simulation coords
+      const simX = s.portrait ? s.screenH - sy : sx
+      const simY = s.portrait ? sx : sy
+      const simH = s.dims.h
+      const probeTop = simH * PROBE_TOP_FRAC - 6
+      const probeBot = simH * PROBE_BOT_FRAC + 6
+      return simX <= PROBE_FACE_X && simY >= probeTop && simY <= probeBot
     }
 
     const onMouseMove = (e: MouseEvent) => {
@@ -633,6 +649,13 @@ export default function UltrasoundSimulation() {
 
       // ─── DRAW ──────────────────────────────────────────────────
 
+      // Set up coordinate transform (rotation for portrait mode)
+      ctx.setTransform(currentDpr, 0, 0, currentDpr, 0, 0)
+      if (s.portrait) {
+        ctx.translate(0, s.screenH)
+        ctx.rotate(-Math.PI / 2)
+      }
+
       ctx.fillStyle = "#0a0a0f"
       ctx.fillRect(0, 0, w, h)
 
@@ -732,7 +755,7 @@ export default function UltrasoundSimulation() {
         ctx.restore()
 
         // RBC label
-        if (rbc.labeled) {
+        if (rbc.labeled && !s.portrait) {
           ctx.save()
           ctx.globalAlpha = dimFactor
           ctx.font = "600 11px system-ui, sans-serif"
@@ -776,14 +799,10 @@ export default function UltrasoundSimulation() {
 
       // ─── Static layer (skull + probe body) from offscreen canvas ──
       if (staticDirtyRef.current) {
-        renderStatic(w, h, currentDpr)
+        renderStatic(w, h, currentDpr, s.portrait)
       }
       if (staticCanvasRef.current) {
-        ctx.save()
-        ctx.setTransform(1, 0, 0, 1, 0, 0)
-        ctx.drawImage(staticCanvasRef.current, 0, 0)
-        ctx.setTransform(currentDpr, 0, 0, currentDpr, 0, 0)
-        ctx.restore()
+        ctx.drawImage(staticCanvasRef.current, 0, 0, w, h)
       }
 
       // ─── Probe hover glow ──────────────────────────────────────
@@ -889,16 +908,24 @@ export default function UltrasoundSimulation() {
         }
       }
 
-      // Subtle interaction hint
+      // Subtle interaction hint (always in screen space so text is upright)
       if (s.hintOpacity > 0.01) {
         ctx.save()
+        if (s.portrait) {
+          ctx.setTransform(currentDpr, 0, 0, currentDpr, 0, 0)
+        }
         ctx.globalAlpha = s.hintOpacity * 0.45
         ctx.font = "400 13px system-ui, sans-serif"
         ctx.textAlign = "center"
         ctx.textBaseline = "bottom"
         ctx.fillStyle = "#94a3b8"
         const isTouchDevice = "ontouchstart" in window || navigator.maxTouchPoints > 0
-        ctx.fillText(isTouchDevice ? "Tap to pulse" : "Press space to pulse", w / 2, h - 16)
+        const hintText = isTouchDevice ? "Tap to pulse" : "Press space to pulse"
+        if (s.portrait) {
+          ctx.fillText(hintText, h / 2, s.screenH - 16)
+        } else {
+          ctx.fillText(hintText, w / 2, h - 16)
+        }
         ctx.restore()
       }
 
