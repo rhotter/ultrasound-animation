@@ -106,60 +106,75 @@ export default function UltrasoundSimulation() {
 
   const buildVessels = useCallback((w: number, h: number): Vessel[] => {
     const vessels: Vessel[] = []
-    const overflow = 80
-    const vesselStartX = SKULL_RIGHT + 8
+    const overflow = 100 // enough to go fully off-screen
+    const brainLeft = SKULL_RIGHT + 10
 
+    // Middle cerebral artery: enters from top-left, sweeps across, exits off right
     {
       const pts: { x: number; y: number }[] = []
-      const cy = h * 0.42
       for (let i = 0; i <= 50; i++) {
         const frac = i / 50
-        const x = vesselStartX + frac * (w - vesselStartX + overflow)
-        const y = cy + Math.sin(frac * Math.PI * 2) * h * 0.04 + Math.cos(frac * Math.PI * 0.8) * h * 0.02
+        // Start above canvas at brain left edge, sweep horizontally, exit right
+        const x = brainLeft + frac * (w - brainLeft + overflow)
+        const y = -overflow * 0.4 + frac * h * 0.5 +
+          Math.sin(frac * Math.PI * 2.2) * h * 0.06
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.04, flowSpeed: 0.0003 })
     }
+
+    // Anterior cerebral: enters from bottom-left, curves upward, exits off top-right
     {
       const pts: { x: number; y: number }[] = []
-      for (let i = 0; i <= 45; i++) {
-        const frac = i / 45
-        const x = vesselStartX + frac * (w - vesselStartX + overflow)
-        const y = h * 0.2 - frac * frac * h * 0.15 + Math.sin(frac * Math.PI * 2.5) * h * 0.025
+      for (let i = 0; i <= 50; i++) {
+        const frac = i / 50
+        const x = brainLeft + frac * (w - brainLeft + overflow)
+        const y = h + overflow * 0.3 - frac * (h * 0.8 + overflow * 0.6) +
+          Math.sin(frac * Math.PI * 2) * h * 0.04
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.025, flowSpeed: 0.00018 })
     }
+
+    // Posterior cerebral: enters from top, curves across lower half, exits off bottom-right
     {
       const pts: { x: number; y: number }[] = []
-      for (let i = 0; i <= 45; i++) {
-        const frac = i / 45
-        const x = vesselStartX + frac * (w - vesselStartX + overflow)
-        const y = h * 0.68 + frac * frac * h * 0.12 + Math.sin(frac * Math.PI * 2 + 1) * h * 0.025
+      for (let i = 0; i <= 50; i++) {
+        const frac = i / 50
+        const x = brainLeft + frac * (w - brainLeft + overflow)
+        const y = -overflow * 0.3 + frac * (h * 0.7 + overflow * 0.5) +
+          Math.sin(frac * Math.PI * 1.8 + 1) * h * 0.04
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.028, flowSpeed: 0.00022 })
     }
+
+    // Small arteriole: enters from bottom, curves up and right, exits off top
     {
       const pts: { x: number; y: number }[] = []
-      for (let i = 0; i <= 35; i++) {
-        const frac = i / 35
-        const x = vesselStartX + w * 0.15 + frac * (w * 0.6 + overflow)
-        const y = h * 0.3 - frac * h * 0.25 + Math.sin(frac * Math.PI * 3) * h * 0.02
+      for (let i = 0; i <= 40; i++) {
+        const frac = i / 40
+        const x = brainLeft + w * 0.1 + frac * (w * 0.65 + overflow * 0.5)
+        const y = h + overflow * 0.2 - frac * (h * 0.8 + overflow * 0.5) +
+          Math.sin(frac * Math.PI * 3) * h * 0.025
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.015, flowSpeed: 0.00012 })
     }
+
+    // Small arteriole: enters from top, curves down and right, exits off bottom
     {
       const pts: { x: number; y: number }[] = []
-      for (let i = 0; i <= 35; i++) {
-        const frac = i / 35
-        const x = vesselStartX + w * 0.1 + frac * (w * 0.65 + overflow)
-        const y = h * 0.58 + frac * h * 0.22 + Math.sin(frac * Math.PI * 2.5 + 1) * h * 0.02
+      for (let i = 0; i <= 40; i++) {
+        const frac = i / 40
+        const x = brainLeft + w * 0.05 + frac * (w * 0.7 + overflow * 0.5)
+        const y = -overflow * 0.2 + frac * (h * 0.7 + overflow * 0.4) +
+          Math.sin(frac * Math.PI * 2.5 + 1) * h * 0.03
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.016, flowSpeed: 0.00015 })
     }
+
     return vessels
   }, [])
 
