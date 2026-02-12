@@ -630,12 +630,12 @@ export default function UltrasoundSimulation() {
             echo.cy + echo.radius < 0 || echo.cy - echo.radius > h) continue
 
         ctx.globalAlpha = echo.opacity * 0.3
-        ctx.strokeStyle = "#ff8888"
+        ctx.strokeStyle = "#5ec8fa"
         ctx.lineWidth = 4
         ctx.beginPath(); ctx.arc(echo.cx, echo.cy, echo.radius, 0, Math.PI * 2); ctx.stroke()
 
         ctx.globalAlpha = echo.opacity * 0.7
-        ctx.strokeStyle = "#ff5555"
+        ctx.strokeStyle = "#38bdf8"
         ctx.lineWidth = 1.5
         ctx.beginPath(); ctx.arc(echo.cx, echo.cy, echo.radius, 0, Math.PI * 2); ctx.stroke()
 
