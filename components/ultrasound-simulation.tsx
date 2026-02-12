@@ -3,16 +3,21 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
 // ─── Constants ───────────────────────────────────────────────────────────────
-const WAVE_SPEED = 2.8
-const WAVE_SPACING = 38
-const WAVE_COUNT = 14
-const REFLECTION_OPACITY_DECAY = 0.012
+const WAVE_SPEED = 2.4
+const WAVE_SPACING = 42
+const INCIDENT_COUNT = 10
+const REFLECTION_SPEED = 2.0
 
-interface Wave {
+interface IncidentWave {
   x: number
   opacity: number
-  reflected: boolean
-  reflectedAtX?: number
+}
+
+interface ReflectedWave {
+  cx: number
+  cy: number
+  radius: number
+  opacity: number
 }
 
 // ─── Draw helpers ────────────────────────────────────────────────────────────
@@ -24,25 +29,29 @@ function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fillStyle = grad
   ctx.fillRect(0, 0, w, h)
 
-  // subtle tissue-like texture
-  ctx.globalAlpha = 0.025
-  for (let i = 0; i < 120; i++) {
-    const tx = Math.random() * w
-    const ty = Math.random() * h
-    const r = Math.random() * 3 + 1
+  // subtle grid
+  ctx.globalAlpha = 0.03
+  ctx.strokeStyle = "#4ea8c7"
+  ctx.lineWidth = 0.5
+  for (let gx = 0; gx < w; gx += 40) {
     ctx.beginPath()
-    ctx.arc(tx, ty, r, 0, Math.PI * 2)
-    ctx.fillStyle = "#4ea8c7"
-    ctx.fill()
+    ctx.moveTo(gx, 0)
+    ctx.lineTo(gx, h)
+    ctx.stroke()
+  }
+  for (let gy = 0; gy < h; gy += 40) {
+    ctx.beginPath()
+    ctx.moveTo(0, gy)
+    ctx.lineTo(w, gy)
+    ctx.stroke()
   }
   ctx.globalAlpha = 1
 }
 
 function drawTransducer(ctx: CanvasRenderingContext2D, x: number, h: number) {
-  const tw = 28
-  const th = h * 0.38
+  const tw = 22
+  const th = h * 0.36
 
-  // body
   const grad = ctx.createLinearGradient(x - tw, 0, x + tw, 0)
   grad.addColorStop(0, "#1e3a5f")
   grad.addColorStop(0.5, "#2d5a8a")
@@ -55,7 +64,7 @@ function drawTransducer(ctx: CanvasRenderingContext2D, x: number, h: number) {
 
   // emitting face glow
   ctx.shadowColor = "#38bdf8"
-  ctx.shadowBlur = 18
+  ctx.shadowBlur = 14
   ctx.fillStyle = "#38bdf8"
   ctx.fillRect(x + tw - 3, h / 2 - th / 2 + 8, 3, th - 16)
   ctx.shadowBlur = 0
@@ -77,24 +86,19 @@ function drawRedBloodCell(
   ctx.save()
   ctx.translate(cx, cy)
 
-  // gentle floating motion
-  const floatY = Math.sin(time * 0.8) * 4
-  const floatRot = Math.sin(time * 0.5) * 0.06
+  const floatY = Math.sin(time * 0.6) * 3
+  const floatRot = Math.sin(time * 0.4) * 0.04
   ctx.translate(0, floatY)
   ctx.rotate(floatRot)
 
-  // glow when hit
   if (isHit) {
     ctx.shadowColor = "#ff4444"
-    ctx.shadowBlur = 30
+    ctx.shadowBlur = 35
   }
 
-  // biconcave disc shape - side view (classic RBC profile)
-  const rOuter = 36
-  const indent = 12
+  const rOuter = 34
 
-  // outer membrane
-  const grad = ctx.createRadialGradient(0, 0, rOuter * 0.2, 0, 0, rOuter)
+  const grad = ctx.createRadialGradient(0, 0, rOuter * 0.15, 0, 0, rOuter)
   grad.addColorStop(0, isHit ? "#ff6666" : "#cc3333")
   grad.addColorStop(0.5, isHit ? "#ee4444" : "#aa2222")
   grad.addColorStop(1, isHit ? "#dd3333" : "#881818")
@@ -102,62 +106,80 @@ function drawRedBloodCell(
   ctx.fillStyle = grad
   ctx.beginPath()
 
-  // top curve
+  // biconcave disc shape
   ctx.moveTo(-rOuter, 0)
   ctx.bezierCurveTo(-rOuter, -rOuter * 0.7, -rOuter * 0.3, -rOuter * 0.85, 0, -rOuter * 0.75)
   ctx.bezierCurveTo(rOuter * 0.3, -rOuter * 0.85, rOuter, -rOuter * 0.7, rOuter, 0)
-
-  // bottom curve
   ctx.bezierCurveTo(rOuter, rOuter * 0.7, rOuter * 0.3, rOuter * 0.85, 0, rOuter * 0.75)
   ctx.bezierCurveTo(-rOuter * 0.3, rOuter * 0.85, -rOuter, rOuter * 0.7, -rOuter, 0)
   ctx.closePath()
   ctx.fill()
 
-  // biconcave indent (central dimple)
+  // central dimple
   ctx.fillStyle = isHit ? "rgba(120,20,20,0.5)" : "rgba(80,10,10,0.5)"
   ctx.beginPath()
-  ctx.ellipse(0, 0, indent, rOuter * 0.45, 0, 0, Math.PI * 2)
+  ctx.ellipse(0, 0, 11, rOuter * 0.42, 0, 0, Math.PI * 2)
   ctx.fill()
 
   // specular highlight
-  ctx.fillStyle = "rgba(255,255,255,0.12)"
+  ctx.fillStyle = "rgba(255,255,255,0.1)"
   ctx.beginPath()
-  ctx.ellipse(-8, -12, 10, 6, -0.4, 0, Math.PI * 2)
+  ctx.ellipse(-7, -10, 9, 5, -0.4, 0, Math.PI * 2)
   ctx.fill()
 
   ctx.shadowBlur = 0
   ctx.restore()
 }
 
-function drawWavefront(
+function drawIncidentWave(
   ctx: CanvasRenderingContext2D,
   x: number,
   cy: number,
   h: number,
-  opacity: number,
-  reflected: boolean
+  opacity: number
 ) {
-  const waveH = h * 0.35
+  const waveH = h * 0.34
   ctx.save()
   ctx.globalAlpha = Math.max(0, opacity)
 
-  // arc wavefront
-  const color = reflected ? "#ff6b6b" : "#38bdf8"
   const grad = ctx.createLinearGradient(x, cy - waveH / 2, x, cy + waveH / 2)
   grad.addColorStop(0, "transparent")
-  grad.addColorStop(0.3, color)
-  grad.addColorStop(0.5, color)
-  grad.addColorStop(0.7, color)
+  grad.addColorStop(0.2, "#38bdf8")
+  grad.addColorStop(0.5, "#38bdf8")
+  grad.addColorStop(0.8, "#38bdf8")
   grad.addColorStop(1, "transparent")
 
   ctx.strokeStyle = grad
-  ctx.lineWidth = reflected ? 1.8 : 2.2
-  ctx.beginPath()
+  ctx.lineWidth = 2.2
 
-  // curved wavefront
-  const curveAmount = reflected ? -14 : 14
+  ctx.beginPath()
+  // slight curvature for incident wavefront
   ctx.moveTo(x, cy - waveH / 2)
-  ctx.quadraticCurveTo(x + curveAmount, cy, x, cy + waveH / 2)
+  ctx.quadraticCurveTo(x + 10, cy, x, cy + waveH / 2)
+  ctx.stroke()
+
+  ctx.restore()
+}
+
+function drawReflectedWave(
+  ctx: CanvasRenderingContext2D,
+  wave: ReflectedWave
+) {
+  ctx.save()
+  ctx.globalAlpha = Math.max(0, wave.opacity)
+
+  ctx.strokeStyle = "#ff6b6b"
+  ctx.lineWidth = 1.8
+  ctx.beginPath()
+  ctx.arc(wave.cx, wave.cy, wave.radius, 0, Math.PI * 2)
+  ctx.stroke()
+
+  // inner glow ring
+  ctx.globalAlpha = Math.max(0, wave.opacity * 0.3)
+  ctx.strokeStyle = "#ff9999"
+  ctx.lineWidth = 0.8
+  ctx.beginPath()
+  ctx.arc(wave.cx, wave.cy, wave.radius, 0, Math.PI * 2)
   ctx.stroke()
 
   ctx.restore()
@@ -165,39 +187,60 @@ function drawWavefront(
 
 function drawLabels(ctx: CanvasRenderingContext2D, w: number, h: number, cellX: number) {
   ctx.save()
+
+  // transducer label
   ctx.fillStyle = "#5a9ab8"
   ctx.font = "11px system-ui"
   ctx.textAlign = "center"
-
-  // transducer label
-  ctx.fillText("Transducer", 56, h / 2 + h * 0.24)
+  ctx.fillText("Transducer", 50, h / 2 + h * 0.24)
 
   // RBC label
   ctx.fillStyle = "#c47070"
-  ctx.fillText("Red Blood Cell", cellX, h / 2 + 62)
+  ctx.fillText("Red Blood Cell", cellX, h / 2 + 58)
 
-  // arrows for incident waves
+  // incident direction
   ctx.strokeStyle = "rgba(56,189,248,0.3)"
   ctx.lineWidth = 1
   ctx.setLineDash([4, 4])
   ctx.beginPath()
-  ctx.moveTo(100, h * 0.18)
-  ctx.lineTo(w * 0.45, h * 0.18)
+  ctx.moveTo(90, h * 0.14)
+  ctx.lineTo(w * 0.44, h * 0.14)
   ctx.stroke()
+
+  // arrow tip
+  ctx.fillStyle = "rgba(56,189,248,0.4)"
+  ctx.setLineDash([])
+  ctx.beginPath()
+  ctx.moveTo(w * 0.44, h * 0.14)
+  ctx.lineTo(w * 0.44 - 6, h * 0.14 - 3)
+  ctx.lineTo(w * 0.44 - 6, h * 0.14 + 3)
+  ctx.closePath()
+  ctx.fill()
 
   ctx.fillStyle = "rgba(56,189,248,0.5)"
   ctx.font = "10px system-ui"
-  ctx.fillText("Incident Waves", w * 0.28, h * 0.16)
+  ctx.fillText("Incident Waves", w * 0.27, h * 0.12)
 
-  // arrow for reflected waves
+  // reflected direction
   ctx.strokeStyle = "rgba(255,107,107,0.3)"
+  ctx.setLineDash([4, 4])
   ctx.beginPath()
-  ctx.moveTo(w * 0.45, h * 0.84)
-  ctx.lineTo(100, h * 0.84)
+  ctx.moveTo(w * 0.44, h * 0.88)
+  ctx.lineTo(90, h * 0.88)
   ctx.stroke()
 
+  ctx.fillStyle = "rgba(255,107,107,0.4)"
+  ctx.setLineDash([])
+  ctx.beginPath()
+  ctx.moveTo(90, h * 0.88)
+  ctx.lineTo(96, h * 0.88 - 3)
+  ctx.lineTo(96, h * 0.88 + 3)
+  ctx.closePath()
+  ctx.fill()
+
   ctx.fillStyle = "rgba(255,107,107,0.5)"
-  ctx.fillText("Reflected Echoes", w * 0.28, h * 0.82)
+  ctx.font = "10px system-ui"
+  ctx.fillText("Spherical Echoes", w * 0.27, h * 0.86)
 
   ctx.setLineDash([])
   ctx.restore()
@@ -208,10 +251,11 @@ function drawLabels(ctx: CanvasRenderingContext2D, w: number, h: number, cellX: 
 export default function UltrasoundSimulation() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animFrameRef = useRef<number>(0)
-  const wavesRef = useRef<Wave[]>([])
+  const incidentRef = useRef<IncidentWave[]>([])
+  const reflectedRef = useRef<ReflectedWave[]>([])
   const timeRef = useRef(0)
   const [isPaused, setIsPaused] = useState(false)
-  const [frequency, setFrequency] = useState(1) // multiplier
+  const [frequency, setFrequency] = useState(1)
   const isPausedRef = useRef(false)
   const frequencyRef = useRef(1)
 
@@ -223,17 +267,17 @@ export default function UltrasoundSimulation() {
     frequencyRef.current = frequency
   }, [frequency])
 
-  const initWaves = useCallback((canvasW: number) => {
-    const startX = 85
-    const waves: Wave[] = []
-    for (let i = 0; i < WAVE_COUNT; i++) {
+  const initWaves = useCallback(() => {
+    const startX = 80
+    const waves: IncidentWave[] = []
+    for (let i = 0; i < INCIDENT_COUNT; i++) {
       waves.push({
         x: startX - i * WAVE_SPACING,
         opacity: 1,
-        reflected: false,
       })
     }
-    wavesRef.current = waves
+    incidentRef.current = waves
+    reflectedRef.current = []
   }, [])
 
   useEffect(() => {
@@ -249,7 +293,7 @@ export default function UltrasoundSimulation() {
       canvas.width = rect.width * dpr
       canvas.height = rect.height * dpr
       ctx.scale(dpr, dpr)
-      initWaves(rect.width)
+      initWaves()
     }
 
     resize()
@@ -259,64 +303,87 @@ export default function UltrasoundSimulation() {
       const rect = canvas.getBoundingClientRect()
       const w = rect.width
       const h = rect.height
+      const cy = h / 2
 
       if (!isPausedRef.current) {
         timeRef.current += 0.016
       }
 
       const cellX = w * 0.62
-      const transducerX = 56
+      const cellR = 34
+      const transducerFace = 74
       let isHit = false
 
-      // update waves
       if (!isPausedRef.current) {
         const speed = WAVE_SPEED * frequencyRef.current
-        for (const wave of wavesRef.current) {
-          if (!wave.reflected) {
-            wave.x += speed
-            if (wave.x >= cellX - 38) {
-              wave.reflected = true
-              wave.reflectedAtX = wave.x
-              wave.opacity = 0.85
-            }
+
+        // update incident waves
+        for (const wave of incidentRef.current) {
+          wave.x += speed
+
+          // fade in
+          if (wave.x < transducerFace + 30) {
+            wave.opacity = Math.max(
+              0,
+              (wave.x - (transducerFace - WAVE_SPACING * 2)) / (WAVE_SPACING * 2 + 30)
+            )
           } else {
-            wave.x -= speed * 0.7
-            wave.opacity -= REFLECTION_OPACITY_DECAY
-          }
-
-          // reset wave when it goes off-screen or fades out
-          if (wave.reflected && (wave.x < transducerX - 20 || wave.opacity <= 0)) {
-            wave.x = transducerX - WAVE_SPACING * 2
-            wave.opacity = 0
-            wave.reflected = false
-            wave.reflectedAtX = undefined
-          }
-
-          // fade in new waves
-          if (!wave.reflected && wave.x > transducerX + 30 && wave.opacity < 1) {
             wave.opacity = Math.min(1, wave.opacity + 0.03)
           }
-          if (!wave.reflected && wave.x < transducerX + 30) {
-            wave.opacity = Math.max(0, (wave.x - (transducerX - WAVE_SPACING * 2)) / (WAVE_SPACING * 2 + 30))
+
+          // hit the cell - spawn spherical reflection
+          if (wave.x >= cellX - cellR) {
+            // spawn reflection from the cell surface
+            const floatY = Math.sin(timeRef.current * 0.6) * 3
+            reflectedRef.current.push({
+              cx: cellX - cellR + 2,
+              cy: cy + floatY,
+              radius: 2,
+              opacity: 0.9,
+            })
+
+            // reset wave to start
+            wave.x = transducerFace - WAVE_SPACING * 2
+            wave.opacity = 0
+            isHit = true
           }
         }
 
-        // check if any wave is near cell
-        isHit = wavesRef.current.some(
-          (wv) =>
-            !wv.reflected && Math.abs(wv.x - cellX) < 50
+        // update reflected waves (expanding circles)
+        const reflSpeed = REFLECTION_SPEED * frequencyRef.current
+        for (const rw of reflectedRef.current) {
+          rw.radius += reflSpeed * 1.2
+          rw.opacity -= 0.005
+        }
+
+        // remove faded-out reflections
+        reflectedRef.current = reflectedRef.current.filter(
+          (rw) => rw.opacity > 0.01 && rw.radius < w
         )
+
+        // check proximity for glow
+        if (!isHit) {
+          isHit = incidentRef.current.some(
+            (wv) => Math.abs(wv.x - (cellX - cellR)) < 20 && wv.opacity > 0.3
+          )
+        }
       }
 
-      // draw
+      // ─── Draw ──────────────────────────────────────────────────────
       drawBackground(ctx, w, h)
-      drawTransducer(ctx, transducerX, h)
-      drawRedBloodCell(ctx, cellX, h / 2, timeRef.current, isHit)
+      drawTransducer(ctx, 50, h)
 
-      // draw wavefronts
-      for (const wave of wavesRef.current) {
+      // reflected waves (behind the cell)
+      for (const rw of reflectedRef.current) {
+        drawReflectedWave(ctx, rw)
+      }
+
+      drawRedBloodCell(ctx, cellX, cy, timeRef.current, isHit)
+
+      // incident wavefronts
+      for (const wave of incidentRef.current) {
         if (wave.opacity > 0.02) {
-          drawWavefront(ctx, wave.x, h / 2, h, wave.opacity, wave.reflected)
+          drawIncidentWave(ctx, wave.x, cy, h, wave.opacity)
         }
       }
 
@@ -329,7 +396,7 @@ export default function UltrasoundSimulation() {
       ctx.fillText("Ultrasound Propagation & Reflection", 16, 24)
       ctx.font = "11px system-ui"
       ctx.fillStyle = "#4a7f99"
-      ctx.fillText("Red Blood Cell Echo Simulation", 16, 40)
+      ctx.fillText("2D Spherical Echo Simulation", 16, 40)
 
       animFrameRef.current = requestAnimationFrame(animate)
     }
@@ -348,7 +415,9 @@ export default function UltrasoundSimulation() {
         <canvas
           ref={canvasRef}
           className="w-full rounded-xl border border-border"
-          style={{ height: 420, imageRendering: "auto" }}
+          style={{ height: 440, imageRendering: "auto" }}
+          role="img"
+          aria-label="2D animation of ultrasound waves propagating from a transducer and reflecting as spherical echoes off a red blood cell"
         />
       </div>
 
@@ -359,11 +428,11 @@ export default function UltrasoundSimulation() {
           className="flex items-center gap-2 rounded-lg border border-border bg-secondary px-5 py-2.5 text-sm font-medium text-secondary-foreground transition-colors hover:bg-muted"
         >
           {isPaused ? (
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
               <path d="M4 2l10 6-10 6V2z" />
             </svg>
           ) : (
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
               <rect x="3" y="2" width="4" height="12" rx="1" />
               <rect x="9" y="2" width="4" height="12" rx="1" />
             </svg>
@@ -391,13 +460,10 @@ export default function UltrasoundSimulation() {
         </div>
 
         <button
-          onClick={() => {
-            const canvas = canvasRef.current
-            if (canvas) initWaves(canvas.getBoundingClientRect().width)
-          }}
+          onClick={initWaves}
           className="flex items-center gap-2 rounded-lg border border-border bg-secondary px-5 py-2.5 text-sm font-medium text-secondary-foreground transition-colors hover:bg-muted"
         >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
             <path d="M2 8a6 6 0 0 1 10.3-4.1M14 8a6 6 0 0 1-10.3 4.1" />
             <path d="M12.3 1v3h-3M3.7 15v-3h3" />
           </svg>
@@ -410,17 +476,17 @@ export default function UltrasoundSimulation() {
         <InfoCard
           title="Incident Pulse"
           color="text-primary"
-          description="Ultrasound waves travel through tissue as longitudinal pressure waves at ~1540 m/s."
+          description="Planar ultrasound wavefronts travel through tissue as longitudinal pressure waves at ~1540 m/s."
         />
         <InfoCard
-          title="Acoustic Impedance"
+          title="Spherical Reflection"
           color="text-accent"
-          description="When the wave encounters the RBC membrane, an impedance mismatch causes partial reflection."
+          description="When the wave strikes the RBC, the impedance mismatch causes spherical echoes to radiate outward from the scattering point."
         />
         <InfoCard
           title="Echo Detection"
           color="text-muted-foreground"
-          description="The reflected echoes return to the transducer and are converted into an electrical signal for imaging."
+          description="The expanding spherical echoes propagate in all directions; the fraction reaching the transducer is recorded for imaging."
         />
       </div>
     </div>
