@@ -92,6 +92,7 @@ export default function UltrasoundSimulation() {
     dims: { w: number; h: number }
     restartTimer: number | null
     sulci: { x: number; y: number; angle: number; len: number; width: number }[]
+    elementActivations: number[] // per-element glow intensity (0-1), decays over time
   }>({
     vessels: [],
     rbcs: [],
@@ -102,6 +103,7 @@ export default function UltrasoundSimulation() {
     dims: { w: 0, h: 0 },
     restartTimer: null,
     sulci: [],
+    elementActivations: new Array(NUM_ELEMENTS).fill(0),
   })
 
   // Pre-render brain tissue texture to an offscreen buffer
@@ -361,6 +363,7 @@ export default function UltrasoundSimulation() {
       }
       s.echoes = []
       s.pulse = { x: PROBE_FACE_X, opacity: 1, active: true }
+      s.elementActivations = new Array(NUM_ELEMENTS).fill(0)
       s.restartTimer = null
     }
 
@@ -421,6 +424,38 @@ export default function UltrasoundSimulation() {
         echo.opacity = Math.max(0, 0.9 - (s.time - echo.birthTime) * 0.1)
       }
       s.echoes = s.echoes.filter((e) => e.opacity > 0.01)
+
+      // ─── Detect echoes hitting transducer elements ─────────────
+      const elementGapCalc = 2.5
+      const totalGapsCalc = (NUM_ELEMENTS - 1) * elementGapCalc
+      const elementHCalc = (probeH - totalGapsCalc) / NUM_ELEMENTS
+
+      // Decay existing activations
+      for (let i = 0; i < NUM_ELEMENTS; i++) {
+        s.elementActivations[i] = Math.max(0, s.elementActivations[i] - 0.02)
+      }
+
+      // Check each echo against each element
+      for (const echo of s.echoes) {
+        if (echo.opacity < 0.05) continue
+        // Distance from echo center to the probe face
+        const dx = echo.cx - PROBE_FACE_X
+        const distToFace = Math.abs(echo.radius - Math.abs(dx))
+        // Only activate when the echo wavefront is crossing the face (within a few px)
+        if (distToFace > 4) continue
+        // Only activate if the echo is expanding back toward the probe
+        if (echo.cx < PROBE_FACE_X) continue
+
+        for (let i = 0; i < NUM_ELEMENTS; i++) {
+          const eCenterY = probeTop + i * (elementHCalc + elementGapCalc) + elementHCalc / 2
+          const dy = echo.cy - eCenterY
+          const distFromEchoCenter = Math.sqrt(dx * dx + dy * dy)
+          // Check if this element's y-position is within the echo circle
+          if (Math.abs(distFromEchoCenter - echo.radius) < elementHCalc * 0.8) {
+            s.elementActivations[i] = Math.min(1, s.elementActivations[i] + 0.4)
+          }
+        }
+      }
 
       // ─── Auto-restart ──────────────────────────────────────────
       if (!s.pulse.active && s.echoes.length === 0 && !s.restartTimer) {
@@ -763,8 +798,9 @@ export default function UltrasoundSimulation() {
 
       for (let i = 0; i < NUM_ELEMENTS; i++) {
         const ey = probeTop + i * (elementH + elementGap)
-        const active =
+        const transmitting =
           s.pulse.active && s.pulse.x < faceX + 30 && s.pulse.x >= faceX - 5
+        const receiveGlow = s.elementActivations[i] || 0
 
         // Dark separator
         if (i > 0) {
@@ -777,12 +813,17 @@ export default function UltrasoundSimulation() {
           )
         }
 
-        // Element fill
+        // Element fill -- transmit = cyan, receive = amber/orange
         const elGrad = ctx.createLinearGradient(elementLeft, 0, faceX, 0)
-        if (active) {
+        if (transmitting) {
           elGrad.addColorStop(0, "rgba(56,189,248,0.3)")
           elGrad.addColorStop(0.4, "rgba(56,189,248,0.65)")
           elGrad.addColorStop(1, "rgba(100,210,255,0.85)")
+        } else if (receiveGlow > 0.05) {
+          const g = receiveGlow
+          elGrad.addColorStop(0, `rgba(255,160,40,${0.15 + g * 0.3})`)
+          elGrad.addColorStop(0.4, `rgba(255,130,20,${0.3 + g * 0.45})`)
+          elGrad.addColorStop(1, `rgba(255,180,60,${0.4 + g * 0.5})`)
         } else {
           elGrad.addColorStop(0, "rgba(35,65,100,0.55)")
           elGrad.addColorStop(0.5, "rgba(50,90,130,0.65)")
@@ -792,16 +833,30 @@ export default function UltrasoundSimulation() {
         ctx.fillStyle = elGrad
         ctx.fillRect(elementLeft, ey, elementW, elementH)
 
-        ctx.strokeStyle = active
+        // Element glow shadow for receive
+        if (receiveGlow > 0.1) {
+          ctx.save()
+          ctx.shadowColor = `rgba(255,150,30,${receiveGlow * 0.8})`
+          ctx.shadowBlur = 8 * receiveGlow
+          ctx.fillStyle = `rgba(255,160,40,${receiveGlow * 0.3})`
+          ctx.fillRect(elementLeft, ey, elementW, elementH)
+          ctx.restore()
+        }
+
+        ctx.strokeStyle = transmitting
           ? "rgba(56,189,248,0.7)"
-          : "rgba(56,189,248,0.25)"
+          : receiveGlow > 0.05
+            ? `rgba(255,170,50,${0.3 + receiveGlow * 0.5})`
+            : "rgba(56,189,248,0.25)"
         ctx.lineWidth = 0.8
         ctx.strokeRect(elementLeft, ey, elementW, elementH)
 
         // Inner highlight
-        ctx.strokeStyle = active
+        ctx.strokeStyle = transmitting
           ? "rgba(140,220,255,0.35)"
-          : "rgba(56,189,248,0.08)"
+          : receiveGlow > 0.05
+            ? `rgba(255,200,100,${receiveGlow * 0.3})`
+            : "rgba(56,189,248,0.08)"
         ctx.lineWidth = 0.5
         ctx.beginPath()
         ctx.moveTo(elementLeft + 1, ey + 1)
@@ -809,16 +864,32 @@ export default function UltrasoundSimulation() {
         ctx.stroke()
       }
 
-      // Emitting face bright edge
+      // Emitting face bright edge -- show per-element receive glow
+      const isTransmitting = s.pulse.active && s.pulse.x < faceX + 30
+      const maxReceive = Math.max(...s.elementActivations)
       ctx.save()
-      ctx.shadowColor = "#38bdf8"
-      ctx.shadowBlur =
-        s.pulse.active && s.pulse.x < faceX + 30 ? 20 : 6
-      ctx.fillStyle =
-        s.pulse.active && s.pulse.x < faceX + 30
-          ? "rgba(56,189,248,0.8)"
-          : "rgba(56,189,248,0.3)"
-      ctx.fillRect(faceX - 1.5, probeTop, 1.5, probeH)
+      if (isTransmitting) {
+        ctx.shadowColor = "#38bdf8"
+        ctx.shadowBlur = 20
+        ctx.fillStyle = "rgba(56,189,248,0.8)"
+        ctx.fillRect(faceX - 1.5, probeTop, 1.5, probeH)
+      } else {
+        // Draw face edge per-element so receive glow shows individually
+        for (let i = 0; i < NUM_ELEMENTS; i++) {
+          const ey = probeTop + i * (elementH + elementGap)
+          const rg = s.elementActivations[i] || 0
+          if (rg > 0.05) {
+            ctx.shadowColor = `rgba(255,150,30,${rg * 0.9})`
+            ctx.shadowBlur = 12 * rg
+            ctx.fillStyle = `rgba(255,170,50,${0.3 + rg * 0.6})`
+          } else {
+            ctx.shadowColor = "#38bdf8"
+            ctx.shadowBlur = 4
+            ctx.fillStyle = "rgba(56,189,248,0.25)"
+          }
+          ctx.fillRect(faceX - 1.5, ey, 1.5, elementH)
+        }
+      }
       ctx.restore()
 
       // Matching layer
