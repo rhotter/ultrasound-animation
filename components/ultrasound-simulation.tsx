@@ -626,9 +626,9 @@ export default function UltrasoundSimulation() {
       // ─── Transducer probe ─────────────────────────────────────
       // ─── Temporal bone (skull layer) -- drawn on top of vessels/echoes ──
       {
-        const skullTop = probeTop - 6
-        const skullBot = probeBot + 6
-        const skullH = skullBot - skullTop
+        const skullTop = 0
+        const skullBot = h
+        const skullH = h
 
         // Outer table (compact bone)
         const outerW = SKULL_THICKNESS * 0.3
