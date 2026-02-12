@@ -864,7 +864,7 @@ export default function UltrasoundSimulation() {
         clearTimeout(stateRef.current.restartTimer)
       }
     }
-  }, [buildVessels, buildRBCs, buildSulci, buildBrainTexture])
+  }, [buildVessels, buildRBCs])
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
