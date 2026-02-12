@@ -7,18 +7,20 @@ import { useEffect, useRef, useCallback } from "react"
 interface Vessel {
   points: { x: number; y: number }[]
   radius: number
+  flowSpeed: number // derived from vessel size
 }
 
 interface RBC {
   vesselIdx: number
   t: number
-  speed: number
   size: number
   rotation: number
   rotSpeed: number
   hit: boolean
   hitTime: number
   labeled: boolean
+  clumpId: number // -1 = solo, otherwise shared id for clumped cells
+  clumpOffset: number // slight t-offset within clump
 }
 
 interface SphericalEcho {
@@ -206,7 +208,7 @@ export default function UltrasoundSimulation() {
         )
         pts.push({ x, y })
       }
-      vessels.push({ points: pts, radius: h * 0.04 })
+      vessels.push({ points: pts, radius: h * 0.04, flowSpeed: 0.0008 })
     }
 
     // Anterior cerebral artery (upper, more tortuous)
@@ -223,7 +225,7 @@ export default function UltrasoundSimulation() {
         )
         pts.push({ x, y })
       }
-      vessels.push({ points: pts, radius: h * 0.025 })
+      vessels.push({ points: pts, radius: h * 0.025, flowSpeed: 0.0005 })
     }
 
     // Posterior cerebral artery (lower)
@@ -240,7 +242,7 @@ export default function UltrasoundSimulation() {
         )
         pts.push({ x, y })
       }
-      vessels.push({ points: pts, radius: h * 0.028 })
+      vessels.push({ points: pts, radius: h * 0.028, flowSpeed: 0.0006 })
     }
 
     // Branching arteriole (ascending from middle)
@@ -256,7 +258,7 @@ export default function UltrasoundSimulation() {
         )
         pts.push({ x, y })
       }
-      vessels.push({ points: pts, radius: h * 0.015 })
+      vessels.push({ points: pts, radius: h * 0.015, flowSpeed: 0.00035 })
     }
 
     // Branching arteriole (descending from middle)
@@ -272,7 +274,7 @@ export default function UltrasoundSimulation() {
         )
         pts.push({ x, y })
       }
-      vessels.push({ points: pts, radius: h * 0.016 })
+      vessels.push({ points: pts, radius: h * 0.016, flowSpeed: 0.0004 })
     }
 
     return vessels
@@ -280,24 +282,58 @@ export default function UltrasoundSimulation() {
 
   const buildRBCs = useCallback((): RBC[] => {
     const rbcs: RBC[] = []
-    const distribution = [3, 2, 2, 2, 2]
+    // distribution per vessel: [solo cells, clumps of 2-3]
+    const distribution = [
+      { solo: 1, clumps: [2] },      // middle cerebral: 1 solo + 1 clump of 2
+      { solo: 1, clumps: [3] },      // anterior: 1 solo + 1 clump of 3
+      { solo: 2, clumps: [] },       // posterior: 2 solo
+      { solo: 1, clumps: [2] },      // ascending arteriole: 1 solo + 1 clump of 2
+      { solo: 1, clumps: [] },       // descending arteriole: 1 solo
+    ]
     let firstLabeled = false
+    let clumpIdCounter = 0
+
     for (let vi = 0; vi < 5; vi++) {
-      const count = distribution[vi] || 2
-      for (let i = 0; i < count; i++) {
-        const labeled = !firstLabeled && vi === 0 && i === 1
+      const cfg = distribution[vi]
+
+      // Solo cells - spread out along the vessel
+      for (let i = 0; i < cfg.solo; i++) {
+        const labeled = !firstLabeled && vi === 0 && i === 0
         if (labeled) firstLabeled = true
         rbcs.push({
           vesselIdx: vi,
-          t: 0.35 + Math.random() * 0.6,
-          speed: 0.0003 + Math.random() * 0.0004,
+          t: 0.4 + (i / Math.max(1, cfg.solo)) * 0.4 + Math.random() * 0.1,
           size: 3 + Math.random() * 2.5,
           rotation: Math.random() * Math.PI * 2,
           rotSpeed: (Math.random() - 0.5) * 0.02,
           hit: false,
           hitTime: 0,
           labeled,
+          clumpId: -1,
+          clumpOffset: 0,
         })
+      }
+
+      // Clumped cells - tight groups with very small t-offsets
+      for (const clumpSize of cfg.clumps) {
+        const clumpCenter = 0.55 + Math.random() * 0.3
+        const cid = clumpIdCounter++
+        for (let j = 0; j < clumpSize; j++) {
+          // Very small offset so they stay close together
+          const offset = (j - (clumpSize - 1) / 2) * 0.012
+          rbcs.push({
+            vesselIdx: vi,
+            t: clumpCenter + offset,
+            size: 3 + Math.random() * 2,
+            rotation: Math.random() * Math.PI * 2,
+            rotSpeed: (Math.random() - 0.5) * 0.015,
+            hit: false,
+            hitTime: 0,
+            labeled: false,
+            clumpId: cid,
+            clumpOffset: offset,
+          })
+        }
       }
     }
     return rbcs
@@ -381,9 +417,10 @@ export default function UltrasoundSimulation() {
       const probeBot = h * PROBE_BOT_FRAC
       const probeH = probeBot - probeTop
 
-      // ─── Move RBCs ─────────────────────────────────────────────
+      // ─── Move RBCs (all cells in same vessel move at vessel's flow speed) ──
       for (const rbc of s.rbcs) {
-        rbc.t += rbc.speed
+        const vessel = s.vessels[rbc.vesselIdx]
+        rbc.t += vessel.flowSpeed
         if (rbc.t > 1) rbc.t -= 1
         rbc.rotation += rbc.rotSpeed
       }
