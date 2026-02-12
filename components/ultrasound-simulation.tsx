@@ -198,7 +198,7 @@ export default function UltrasoundSimulation() {
         if (labeled) firstLabeled = true
         rbcs.push({
           vesselIdx: vi,
-          t: Math.random(),
+          t: 0.35 + Math.random() * 0.6,
           speed: 0.0003 + Math.random() * 0.0004,
           size: 3 + Math.random() * 2.5,
           rotation: Math.random() * Math.PI * 2,
@@ -483,7 +483,7 @@ export default function UltrasoundSimulation() {
           ctx.setLineDash([])
 
           // Label background
-          const text = "RBC"
+          const text = "Red Blood Cell"
           const tm = ctx.measureText(text)
           const px = 5
           const py = 3
@@ -503,7 +503,7 @@ export default function UltrasoundSimulation() {
         }
       }
 
-      // ─── Incident pulse wavefront ─────────────────────────────
+      // ─── Incident pulse wavefront ────────────��────────────────
       if (s.pulse.active && s.pulse.x > PROBE_FACE_X) {
         ctx.save()
         ctx.globalAlpha = s.pulse.opacity
@@ -609,10 +609,10 @@ export default function UltrasoundSimulation() {
       ctx.stroke()
 
       // ─── Individual transducer elements ────────────────────────
-      const elementGap = 1.5
+      const elementGap = 2.5
       const totalGaps = (NUM_ELEMENTS - 1) * elementGap
       const elementH = (probeH - totalGaps) / NUM_ELEMENTS
-      const elementW = PROBE_HOUSING_WIDTH * 0.5
+      const elementW = PROBE_HOUSING_WIDTH * 0.55
       const elementLeft = faceX - elementW
 
       for (let i = 0; i < NUM_ELEMENTS; i++) {
@@ -621,26 +621,44 @@ export default function UltrasoundSimulation() {
         // Piezo element
         const active =
           s.pulse.active && s.pulse.x < faceX + 30 && s.pulse.x >= faceX - 5
+
+        // Gap background (dark separator between elements)
+        if (i > 0) {
+          ctx.fillStyle = "#080d14"
+          ctx.fillRect(elementLeft - 1, ey - elementGap, elementW + 2, elementGap)
+        }
+
+        // Element fill - stronger, more saturated colours
         const elGrad = ctx.createLinearGradient(elementLeft, 0, faceX, 0)
         if (active) {
-          elGrad.addColorStop(0, "rgba(56,189,248,0.15)")
-          elGrad.addColorStop(0.5, "rgba(56,189,248,0.4)")
-          elGrad.addColorStop(1, "rgba(56,189,248,0.6)")
+          elGrad.addColorStop(0, "rgba(56,189,248,0.3)")
+          elGrad.addColorStop(0.4, "rgba(56,189,248,0.65)")
+          elGrad.addColorStop(1, "rgba(100,210,255,0.85)")
         } else {
-          elGrad.addColorStop(0, "rgba(40,70,100,0.3)")
-          elGrad.addColorStop(0.5, "rgba(50,80,110,0.4)")
-          elGrad.addColorStop(1, "rgba(45,75,105,0.35)")
+          elGrad.addColorStop(0, "rgba(35,65,100,0.55)")
+          elGrad.addColorStop(0.5, "rgba(50,90,130,0.65)")
+          elGrad.addColorStop(1, "rgba(45,80,115,0.55)")
         }
 
         ctx.fillStyle = elGrad
         ctx.fillRect(elementLeft, ey, elementW, elementH)
 
-        // Element border
+        // Element border - stronger
         ctx.strokeStyle = active
-          ? "rgba(56,189,248,0.5)"
-          : "rgba(56,189,248,0.12)"
-        ctx.lineWidth = 0.5
+          ? "rgba(56,189,248,0.7)"
+          : "rgba(56,189,248,0.25)"
+        ctx.lineWidth = 0.8
         ctx.strokeRect(elementLeft, ey, elementW, elementH)
+
+        // Inner highlight line on each element
+        ctx.strokeStyle = active
+          ? "rgba(140,220,255,0.35)"
+          : "rgba(56,189,248,0.08)"
+        ctx.lineWidth = 0.5
+        ctx.beginPath()
+        ctx.moveTo(elementLeft + 1, ey + 1)
+        ctx.lineTo(faceX - 1, ey + 1)
+        ctx.stroke()
       }
 
       // Emitting face bright edge
@@ -722,19 +740,6 @@ export default function UltrasoundSimulation() {
 
       ctx.fillStyle = "rgba(56,189,248,0.85)"
       ctx.fillText(probeLabel, labelX, labelY)
-      ctx.restore()
-
-      // ─── Element count label (small, on housing) ──────────────
-      ctx.save()
-      ctx.font = "500 8px system-ui, sans-serif"
-      ctx.fillStyle = "rgba(56,189,248,0.3)"
-      ctx.textAlign = "center"
-      ctx.textBaseline = "top"
-      ctx.fillText(
-        `${NUM_ELEMENTS} elements`,
-        housingLeft + PROBE_HOUSING_WIDTH / 2,
-        probeTop - 14
-      )
       ctx.restore()
 
       animFrameRef.current = requestAnimationFrame(animate)
