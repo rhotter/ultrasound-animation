@@ -600,13 +600,6 @@ export default function UltrasoundSimulation() {
         ctx.lineTo(s.pulse.x, probeBot)
         ctx.stroke()
 
-        ctx.shadowBlur = 0
-        ctx.lineWidth = 1.2
-        ctx.beginPath()
-        ctx.moveTo(s.pulse.x, probeTop)
-        ctx.lineTo(s.pulse.x, probeBot)
-        ctx.stroke()
-
         ctx.restore()
       }
 
