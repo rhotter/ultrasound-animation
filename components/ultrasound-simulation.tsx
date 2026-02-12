@@ -57,6 +57,19 @@ function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t
 }
 
+function ptSegDistSq(
+  px: number, py: number,
+  ax: number, ay: number,
+  bx: number, by: number
+): number {
+  const dx = bx - ax, dy = by - ay
+  const lenSq = dx * dx + dy * dy
+  if (lenSq === 0) return (px - ax) ** 2 + (py - ay) ** 2
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq))
+  const projX = ax + t * dx, projY = ay + t * dy
+  return (px - projX) ** 2 + (py - projY) ** 2
+}
+
 function getVesselPoint(
   vessel: Vessel,
   t: number
@@ -642,7 +655,24 @@ export default function UltrasoundSimulation() {
         const pos = getVesselPoint(vessel, rbc.t)
         const glowStrength = rbc.hit ? Math.max(0, 1 - (s.time - rbc.hitTime) * 1.2) : 0
 
+        // Check if RBC is behind another vessel
+        let behindVessel = false
+        for (let vi = 0; vi < s.vessels.length; vi++) {
+          if (vi === rbc.vesselIdx) continue
+          const v = s.vessels[vi]
+          const rSq = (v.radius + 3) * (v.radius + 3)
+          for (let j = 0; j < v.points.length - 1; j++) {
+            if (ptSegDistSq(pos.x, pos.y, v.points[j].x, v.points[j].y, v.points[j + 1].x, v.points[j + 1].y) < rSq) {
+              behindVessel = true
+              break
+            }
+          }
+          if (behindVessel) break
+        }
+        const dimFactor = behindVessel ? 0.3 : 1
+
         ctx.save()
+        ctx.globalAlpha = dimFactor
         ctx.translate(pos.x, pos.y)
         ctx.rotate(pos.angle + rbc.rotation)
 
@@ -650,10 +680,10 @@ export default function UltrasoundSimulation() {
 
         // Glow ring instead of shadowBlur
         if (glowStrength > 0.1) {
-          ctx.globalAlpha = glowStrength * 0.4
+          ctx.globalAlpha = glowStrength * 0.4 * dimFactor
           ctx.fillStyle = "#ff4444"
           ctx.beginPath(); ctx.ellipse(0, 0, r + 4, (r + 4) * 0.5, 0, 0, Math.PI * 2); ctx.fill()
-          ctx.globalAlpha = 1
+          ctx.globalAlpha = dimFactor
         }
 
         const isGlowing = glowStrength > 0.1
@@ -673,6 +703,7 @@ export default function UltrasoundSimulation() {
         // RBC label
         if (rbc.labeled) {
           ctx.save()
+          ctx.globalAlpha = dimFactor
           ctx.font = "600 11px system-ui, sans-serif"
           ctx.fillStyle = "rgba(255,100,100,0.9)"
           ctx.textAlign = "left"; ctx.textBaseline = "middle"
