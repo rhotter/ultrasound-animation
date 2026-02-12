@@ -343,34 +343,34 @@ export default function UltrasoundSimulation() {
       }
       s.echoes = s.echoes.filter((e) => e.opacity > 0.01)
 
-      // ─── Detect echoes hitting transducer elements ─────────────
+      // ─── Detect echoes hitting transducer elements (per-element timing) ──
       const elementGapCalc = 2.5
       const totalGapsCalc = (NUM_ELEMENTS - 1) * elementGapCalc
       const elementHCalc = (probeH - totalGapsCalc) / NUM_ELEMENTS
 
       // Decay existing activations
       for (let i = 0; i < NUM_ELEMENTS; i++) {
-        s.elementActivations[i] = Math.max(0, s.elementActivations[i] - 0.02)
+        s.elementActivations[i] = Math.max(0, s.elementActivations[i] - 0.025)
       }
 
-      // Check each echo against each element
+      // For each element, compute exact distance from each echo center
+      // to that element's position on the probe face. The echo circle
+      // reaches each element at a different time based on geometry.
       for (const echo of s.echoes) {
         if (echo.opacity < 0.05) continue
-        // Distance from echo center to the probe face
-        const dx = echo.cx - PROBE_FACE_X
-        const distToFace = Math.abs(echo.radius - Math.abs(dx))
-        // Only activate when the echo wavefront is crossing the face (within a few px)
-        if (distToFace > 4) continue
-        // Only activate if the echo is expanding back toward the probe
+        // Only consider echoes that originated to the right of the probe
         if (echo.cx < PROBE_FACE_X) continue
 
+        const dx = echo.cx - PROBE_FACE_X
+
         for (let i = 0; i < NUM_ELEMENTS; i++) {
-          const eCenterY = probeTop + i * (elementHCalc + elementGapCalc) + elementHCalc / 2
+          const eCenterY = probeTop + i * (elementGapCalc + elementHCalc) + elementHCalc / 2
           const dy = echo.cy - eCenterY
-          const distFromEchoCenter = Math.sqrt(dx * dx + dy * dy)
-          // Check if this element's y-position is within the echo circle
-          if (Math.abs(distFromEchoCenter - echo.radius) < elementHCalc * 0.8) {
-            s.elementActivations[i] = Math.min(1, s.elementActivations[i] + 0.4)
+          // True distance from echo origin to this specific element
+          const distToElement = Math.sqrt(dx * dx + dy * dy)
+          // Has the expanding circle just reached this element? (tight 2px window)
+          if (Math.abs(echo.radius - distToElement) < 2) {
+            s.elementActivations[i] = Math.min(1, s.elementActivations[i] + 0.5)
           }
         }
       }
