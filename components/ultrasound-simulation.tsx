@@ -716,18 +716,40 @@ export default function UltrasoundSimulation() {
         ctx.stroke()
         ctx.setLineDash([])
 
-        // "Skull" label -- vertical text centered on the bone
+        // "Skull" label -- to the right of the skull, near the bottom
         ctx.save()
-        ctx.font = "700 11px system-ui, sans-serif"
-        ctx.textAlign = "center"
+        ctx.font = "600 11px system-ui, sans-serif"
+        ctx.textAlign = "left"
         ctx.textBaseline = "middle"
-        ctx.translate(SKULL_LEFT + SKULL_THICKNESS / 2, h * 0.5)
-        ctx.rotate(-Math.PI / 2)
-        // Text shadow for readability
-        ctx.fillStyle = "rgba(40,30,20,0.9)"
-        ctx.fillText("Skull", 1, 1)
-        ctx.fillStyle = "rgba(220,205,180,0.8)"
-        ctx.fillText("Skull", 0, 0)
+        const skullLabelX = SKULL_RIGHT + 12
+        const skullLabelY = h - 28
+
+        // Leader line
+        ctx.strokeStyle = "rgba(200,180,150,0.35)"
+        ctx.lineWidth = 0.8
+        ctx.setLineDash([3, 2])
+        ctx.beginPath()
+        ctx.moveTo(SKULL_RIGHT + 1, skullLabelY)
+        ctx.lineTo(skullLabelX - 4, skullLabelY)
+        ctx.stroke()
+        ctx.setLineDash([])
+
+        const skullText = "Skull"
+        const skullTm = ctx.measureText(skullText)
+        const spx = 7
+        const spy = 4
+        ctx.fillStyle = "rgba(10,8,10,0.9)"
+        ctx.beginPath()
+        ctx.roundRect(skullLabelX - spx, skullLabelY - 7 - spy, skullTm.width + spx * 2, 14 + spy * 2, 3)
+        ctx.fill()
+        ctx.strokeStyle = "rgba(200,180,150,0.4)"
+        ctx.lineWidth = 0.8
+        ctx.beginPath()
+        ctx.roundRect(skullLabelX - spx, skullLabelY - 7 - spy, skullTm.width + spx * 2, 14 + spy * 2, 3)
+        ctx.stroke()
+
+        ctx.fillStyle = "rgba(210,195,170,0.9)"
+        ctx.fillText(skullText, skullLabelX, skullLabelY)
         ctx.restore()
 
         // Coupling gel strip
