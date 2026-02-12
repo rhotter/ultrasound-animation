@@ -390,7 +390,7 @@ export default function UltrasoundSimulation() {
           const distToElement = Math.sqrt(dx * dx + dy * dy)
           // Has the expanding circle just reached this element? (tight 2px window)
           if (Math.abs(echo.radius - distToElement) < 2) {
-            s.elementActivations[i] = Math.min(1, s.elementActivations[i] + 0.5)
+            s.elementActivations[i] = Math.min(4, s.elementActivations[i] + 0.6)
           }
         }
       }
@@ -853,17 +853,23 @@ export default function UltrasoundSimulation() {
           )
         }
 
-        // Element fill -- transmit = cyan, receive = lighter blue
+        // Element fill -- transmit = cyan, receive = blue that gets brighter/whiter with more hits
         const elGrad = ctx.createLinearGradient(elementLeft, 0, faceX, 0)
         if (transmitting) {
           elGrad.addColorStop(0, "rgba(56,189,248,0.3)")
           elGrad.addColorStop(0.4, "rgba(56,189,248,0.65)")
           elGrad.addColorStop(1, "rgba(100,210,255,0.85)")
         } else if (receiveGlow > 0.05) {
-          const g = receiveGlow
-          elGrad.addColorStop(0, `rgba(100,180,240,${0.15 + g * 0.3})`)
-          elGrad.addColorStop(0.4, `rgba(120,200,255,${0.3 + g * 0.4})`)
-          elGrad.addColorStop(1, `rgba(140,215,255,${0.35 + g * 0.45})`)
+          // g normalised 0-1 for base, intensity captures stacking (>1 = multiple hits)
+          const g = Math.min(receiveGlow, 1)
+          const intensity = Math.min(receiveGlow / 4, 1) // 0..1 over the full 0..4 range
+          // Blend from blue toward white as intensity increases
+          const r = Math.round(100 + intensity * 155)
+          const gr = Math.round(180 + intensity * 75)
+          const b = Math.round(240 + intensity * 15)
+          elGrad.addColorStop(0, `rgba(${r},${gr},${b},${Math.min(0.15 + g * 0.35 + intensity * 0.3, 1)})`)
+          elGrad.addColorStop(0.4, `rgba(${r},${gr},${b},${Math.min(0.3 + g * 0.4 + intensity * 0.25, 1)})`)
+          elGrad.addColorStop(1, `rgba(${r},${gr},${b},${Math.min(0.35 + g * 0.45 + intensity * 0.2, 1)})`)
         } else {
           elGrad.addColorStop(0, "rgba(35,65,100,0.55)")
           elGrad.addColorStop(0.5, "rgba(50,90,130,0.65)")
@@ -873,12 +879,15 @@ export default function UltrasoundSimulation() {
         ctx.fillStyle = elGrad
         ctx.fillRect(elementLeft, ey, elementW, elementH)
 
-        // Element glow shadow for receive
+        // Element glow shadow for receive -- scales with stacked hits
         if (receiveGlow > 0.1) {
+          const intensity = Math.min(receiveGlow / 4, 1)
+          const glowR = Math.round(100 + intensity * 155)
+          const glowG = Math.round(190 + intensity * 65)
           ctx.save()
-          ctx.shadowColor = `rgba(100,190,255,${receiveGlow * 0.6})`
-          ctx.shadowBlur = 8 * receiveGlow
-          ctx.fillStyle = `rgba(110,195,255,${receiveGlow * 0.25})`
+          ctx.shadowColor = `rgba(${glowR},${glowG},255,${Math.min(receiveGlow * 0.4, 1)})`
+          ctx.shadowBlur = Math.min(6 + receiveGlow * 5, 28)
+          ctx.fillStyle = `rgba(${glowR},${glowG},255,${Math.min(receiveGlow * 0.15, 0.7)})`
           ctx.fillRect(elementLeft, ey, elementW, elementH)
           ctx.restore()
         }
@@ -886,7 +895,7 @@ export default function UltrasoundSimulation() {
         ctx.strokeStyle = transmitting
           ? "rgba(56,189,248,0.7)"
           : receiveGlow > 0.05
-            ? `rgba(120,200,255,${0.25 + receiveGlow * 0.4})`
+            ? `rgba(${Math.round(120 + Math.min(receiveGlow / 4, 1) * 135)},${Math.round(200 + Math.min(receiveGlow / 4, 1) * 55)},255,${Math.min(0.25 + receiveGlow * 0.25, 1)})`
             : "rgba(56,189,248,0.25)"
         ctx.lineWidth = 0.8
         ctx.strokeRect(elementLeft, ey, elementW, elementH)
@@ -895,7 +904,7 @@ export default function UltrasoundSimulation() {
         ctx.strokeStyle = transmitting
           ? "rgba(140,220,255,0.35)"
           : receiveGlow > 0.05
-            ? `rgba(140,210,255,${receiveGlow * 0.25})`
+            ? `rgba(${Math.round(140 + Math.min(receiveGlow / 4, 1) * 115)},${Math.round(210 + Math.min(receiveGlow / 4, 1) * 45)},255,${Math.min(receiveGlow * 0.2, 0.8)})`
             : "rgba(56,189,248,0.08)"
         ctx.lineWidth = 0.5
         ctx.beginPath()
@@ -919,9 +928,12 @@ export default function UltrasoundSimulation() {
           const ey = probeTop + i * (elementH + elementGap)
           const rg = s.elementActivations[i] || 0
           if (rg > 0.05) {
-            ctx.shadowColor = `rgba(100,190,255,${rg * 0.7})`
-            ctx.shadowBlur = 10 * rg
-            ctx.fillStyle = `rgba(120,200,255,${0.25 + rg * 0.5})`
+            const fi = Math.min(rg / 4, 1)
+            const fr = Math.round(100 + fi * 155)
+            const fg = Math.round(190 + fi * 65)
+            ctx.shadowColor = `rgba(${fr},${fg},255,${Math.min(rg * 0.4, 1)})`
+            ctx.shadowBlur = Math.min(8 + rg * 5, 26)
+            ctx.fillStyle = `rgba(${fr},${fg},255,${Math.min(0.25 + rg * 0.25, 1)})`
           } else {
             ctx.shadowColor = "#38bdf8"
             ctx.shadowBlur = 4
