@@ -69,9 +69,19 @@ function getVesselPoint(
   }
 }
 
+// Seeded pseudo-random for consistent brain texture
+function seededRandom(seed: number) {
+  let s = seed
+  return () => {
+    s = (s * 16807 + 0) % 2147483647
+    return (s - 1) / 2147483646
+  }
+}
+
 export default function UltrasoundSimulation() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animFrameRef = useRef<number>(0)
+  const brainTextureRef = useRef<ImageData | null>(null)
   const stateRef = useRef<{
     vessels: Vessel[]
     rbcs: RBC[]
@@ -81,6 +91,7 @@ export default function UltrasoundSimulation() {
     initialized: boolean
     dims: { w: number; h: number }
     restartTimer: number | null
+    sulci: { x: number; y: number; angle: number; len: number; width: number }[]
   }>({
     vessels: [],
     rbcs: [],
@@ -90,98 +101,176 @@ export default function UltrasoundSimulation() {
     initialized: false,
     dims: { w: 0, h: 0 },
     restartTimer: null,
+    sulci: [],
   })
+
+  // Pre-render brain tissue texture to an offscreen buffer
+  const buildBrainTexture = useCallback((w: number, h: number): ImageData => {
+    const offscreen = document.createElement("canvas")
+    offscreen.width = w
+    offscreen.height = h
+    const octx = offscreen.getContext("2d")!
+
+    // Base brain tissue -- warm pinkish-grey
+    const bgGrad = octx.createRadialGradient(
+      w * 0.5, h * 0.5, 0,
+      w * 0.5, h * 0.5, w * 0.75
+    )
+    bgGrad.addColorStop(0, "#1e1519")
+    bgGrad.addColorStop(0.4, "#181216")
+    bgGrad.addColorStop(0.7, "#130e12")
+    bgGrad.addColorStop(1, "#0d090c")
+    octx.fillStyle = bgGrad
+    octx.fillRect(0, 0, w, h)
+
+    // Cortical fold patterns (gyri & sulci)
+    const rng = seededRandom(42)
+    octx.lineCap = "round"
+    for (let i = 0; i < 18; i++) {
+      const startX = PROBE_FACE_X + 30 + rng() * (w - PROBE_FACE_X - 80)
+      const startY = rng() * h
+      const angle = rng() * Math.PI * 2
+      const len = 60 + rng() * 160
+
+      // Dark sulcus line
+      octx.strokeStyle = `rgba(8,5,7,${0.3 + rng() * 0.25})`
+      octx.lineWidth = 2 + rng() * 4
+      octx.beginPath()
+      let cx = startX, cy = startY
+      octx.moveTo(cx, cy)
+      const segs = 6 + Math.floor(rng() * 6)
+      for (let j = 0; j < segs; j++) {
+        const segLen = len / segs
+        const curve = (rng() - 0.5) * 60
+        cx += Math.cos(angle + (rng() - 0.5) * 0.8) * segLen
+        cy += Math.sin(angle + (rng() - 0.5) * 0.8) * segLen
+        octx.quadraticCurveTo(
+          cx + Math.cos(angle + Math.PI / 2) * curve,
+          cy + Math.sin(angle + Math.PI / 2) * curve,
+          cx, cy
+        )
+      }
+      octx.stroke()
+
+      // Lighter gyrus edge beside it
+      octx.strokeStyle = `rgba(45,30,38,${0.15 + rng() * 0.15})`
+      octx.lineWidth = 1
+      octx.beginPath()
+      cx = startX + (rng() - 0.5) * 4
+      cy = startY + (rng() - 0.5) * 4
+      octx.moveTo(cx, cy)
+      for (let j = 0; j < segs; j++) {
+        const segLen = len / segs
+        cx += Math.cos(angle + (rng() - 0.5) * 0.8) * segLen
+        cy += Math.sin(angle + (rng() - 0.5) * 0.8) * segLen
+        octx.lineTo(cx, cy)
+      }
+      octx.stroke()
+    }
+
+    // Fine tissue grain
+    const imgData = octx.getImageData(0, 0, w, h)
+    const data = imgData.data
+    for (let i = 0; i < data.length; i += 4) {
+      const noise = (rng() - 0.5) * 8
+      data[i] = Math.max(0, Math.min(255, data[i] + noise))
+      data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + noise * 0.8))
+      data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + noise * 0.9))
+    }
+
+    return imgData
+  }, [])
 
   const buildVessels = useCallback((w: number, h: number): Vessel[] => {
     const vessels: Vessel[] = []
-    const margin = 20 // keep vessels away from edges
+    const margin = 20
     const probeTop = h * PROBE_TOP_FRAC
     const probeBot = h * PROBE_BOT_FRAC
+    const clampY = (y: number) =>
+      Math.max(probeTop + margin, Math.min(probeBot - margin, y))
+    const startX = PROBE_FACE_X + 20
 
-    // Clamp points to stay within the beam field of view
-    const clampY = (y: number) => Math.max(probeTop + margin, Math.min(probeBot - margin, y))
-
-    // Large horizontal vessel (artery) - stays in middle
+    // Middle cerebral artery
     {
       const pts: { x: number; y: number }[] = []
-      const cy = h * 0.48
+      const cy = h * 0.45
       for (let i = 0; i <= 40; i++) {
         const frac = i / 40
-        const x = PROBE_FACE_X + 20 + frac * (w - PROBE_FACE_X - 40)
+        const x = startX + frac * (w - startX - 30)
         const y = clampY(
           cy +
-          Math.sin(frac * Math.PI * 2.5) * h * 0.04 +
-          Math.sin(frac * Math.PI * 5) * h * 0.015
+            Math.sin(frac * Math.PI * 3) * h * 0.05 +
+            Math.cos(frac * Math.PI * 1.5) * h * 0.03
         )
         pts.push({ x, y })
       }
-      vessels.push({ points: pts, radius: h * 0.045 })
+      vessels.push({ points: pts, radius: h * 0.04 })
     }
 
-    // Upper smaller vessel
+    // Anterior cerebral artery (upper, more tortuous)
     {
       const pts: { x: number; y: number }[] = []
-      const cy = h * 0.25
+      const cy = h * 0.22
       for (let i = 0; i <= 35; i++) {
         const frac = i / 35
-        const x = PROBE_FACE_X + 20 + frac * (w - PROBE_FACE_X - 40)
+        const x = startX + frac * (w - startX - 30)
         const y = clampY(
           cy +
-          Math.sin(frac * Math.PI * 1.8 + 0.5) * h * 0.04 +
-          Math.cos(frac * Math.PI * 4) * h * 0.01
+            Math.sin(frac * Math.PI * 2.3 + 0.5) * h * 0.06 +
+            Math.sin(frac * Math.PI * 5) * h * 0.015
+        )
+        pts.push({ x, y })
+      }
+      vessels.push({ points: pts, radius: h * 0.025 })
+    }
+
+    // Posterior cerebral artery (lower)
+    {
+      const pts: { x: number; y: number }[] = []
+      const cy = h * 0.73
+      for (let i = 0; i <= 35; i++) {
+        const frac = i / 35
+        const x = startX + frac * (w - startX - 30)
+        const y = clampY(
+          cy +
+            Math.sin(frac * Math.PI * 2.8 + 1) * h * 0.05 +
+            Math.cos(frac * Math.PI * 4.5) * h * 0.012
         )
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.028 })
     }
 
-    // Lower vessel
-    {
-      const pts: { x: number; y: number }[] = []
-      const cy = h * 0.72
-      for (let i = 0; i <= 35; i++) {
-        const frac = i / 35
-        const x = PROBE_FACE_X + 20 + frac * (w - PROBE_FACE_X - 40)
-        const y = clampY(
-          cy +
-          Math.sin(frac * Math.PI * 2 + 1) * h * 0.04 +
-          Math.sin(frac * Math.PI * 3.5) * h * 0.012
-        )
-        pts.push({ x, y })
-      }
-      vessels.push({ points: pts, radius: h * 0.032 })
-    }
-
-    // Branching capillary (diagonal upper)
+    // Branching arteriole (ascending from middle)
     {
       const pts: { x: number; y: number }[] = []
       for (let i = 0; i <= 25; i++) {
         const frac = i / 25
-        const x = PROBE_FACE_X + 20 + w * 0.2 + frac * (w * 0.5)
+        const x = startX + w * 0.25 + frac * (w * 0.4)
         const y = clampY(
-          h * 0.42 -
-          frac * h * 0.15 +
-          Math.sin(frac * Math.PI * 3) * h * 0.02
+          h * 0.4 -
+            frac * h * 0.18 +
+            Math.sin(frac * Math.PI * 4) * h * 0.02
         )
         pts.push({ x, y })
       }
-      vessels.push({ points: pts, radius: h * 0.018 })
+      vessels.push({ points: pts, radius: h * 0.015 })
     }
 
-    // Branching capillary (diagonal lower)
+    // Branching arteriole (descending from middle)
     {
       const pts: { x: number; y: number }[] = []
       for (let i = 0; i <= 25; i++) {
         const frac = i / 25
-        const x = PROBE_FACE_X + 20 + w * 0.25 + frac * (w * 0.45)
+        const x = startX + w * 0.3 + frac * (w * 0.35)
         const y = clampY(
-          h * 0.55 +
-          frac * h * 0.12 +
-          Math.sin(frac * Math.PI * 2.5 + 1) * h * 0.02
+          h * 0.52 +
+            frac * h * 0.15 +
+            Math.sin(frac * Math.PI * 3 + 1) * h * 0.025
         )
         pts.push({ x, y })
       }
-      vessels.push({ points: pts, radius: h * 0.02 })
+      vessels.push({ points: pts, radius: h * 0.016 })
     }
 
     return vessels
@@ -189,7 +278,7 @@ export default function UltrasoundSimulation() {
 
   const buildRBCs = useCallback((): RBC[] => {
     const rbcs: RBC[] = []
-    const distribution = [4, 3, 3, 2, 2]
+    const distribution = [3, 2, 2, 2, 2]
     let firstLabeled = false
     for (let vi = 0; vi < 5; vi++) {
       const count = distribution[vi] || 2
@@ -210,6 +299,22 @@ export default function UltrasoundSimulation() {
       }
     }
     return rbcs
+  }, [])
+
+  // Build sulci data for gentle animation
+  const buildSulci = useCallback((w: number, h: number) => {
+    const rng = seededRandom(99)
+    const sulci: { x: number; y: number; angle: number; len: number; width: number }[] = []
+    for (let i = 0; i < 12; i++) {
+      sulci.push({
+        x: PROBE_FACE_X + 50 + rng() * (w - PROBE_FACE_X - 100),
+        y: rng() * h,
+        angle: rng() * Math.PI * 2,
+        len: 40 + rng() * 120,
+        width: 1.5 + rng() * 3,
+      })
+    }
+    return sulci
   }, [])
 
   useEffect(() => {
@@ -233,14 +338,16 @@ export default function UltrasoundSimulation() {
 
       s.vessels = buildVessels(w, h)
       s.rbcs = buildRBCs()
+      s.sulci = buildSulci(w, h)
       s.echoes = []
-      s.pulse = {
-        x: PROBE_FACE_X,
-        opacity: 1,
-        active: true,
-      }
+      s.pulse = { x: PROBE_FACE_X, opacity: 1, active: true }
       s.time = 0
       s.initialized = true
+
+      brainTextureRef.current = buildBrainTexture(
+        Math.round(rect.width * dpr),
+        Math.round(rect.height * dpr)
+      )
     }
 
     resize()
@@ -253,11 +360,7 @@ export default function UltrasoundSimulation() {
         rbc.hitTime = 0
       }
       s.echoes = []
-      s.pulse = {
-        x: PROBE_FACE_X,
-        opacity: 1,
-        active: true,
-      }
+      s.pulse = { x: PROBE_FACE_X, opacity: 1, active: true }
       s.restartTimer = null
     }
 
@@ -275,7 +378,7 @@ export default function UltrasoundSimulation() {
       const probeBot = h * PROBE_BOT_FRAC
       const probeH = probeBot - probeTop
 
-      // ─── Move RBCs ───────────────────────────────────────��─────
+      // ─── Move RBCs ─────────────────────────────────────────────
       for (const rbc of s.rbcs) {
         rbc.t += rbc.speed
         if (rbc.t > 1) rbc.t -= 1
@@ -290,8 +393,8 @@ export default function UltrasoundSimulation() {
           if (rbc.hit) continue
           const vessel = s.vessels[rbc.vesselIdx]
           const pos = getVesselPoint(vessel, rbc.t)
-          // Only hit RBCs that are within the visible canvas AND within the beam field of view
-          const inCanvas = pos.x >= 0 && pos.x <= w && pos.y >= 0 && pos.y <= h
+          const inCanvas =
+            pos.x >= 0 && pos.x <= w && pos.y >= 0 && pos.y <= h
           const inBeam = pos.y >= probeTop && pos.y <= probeBot
           const pulseReached = s.pulse.x >= pos.x - rbc.size
           if (inCanvas && inBeam && pulseReached) {
@@ -326,36 +429,45 @@ export default function UltrasoundSimulation() {
 
       // ─── DRAW ──────────────────────────────────────────────────
 
-      // Background
-      const bgGrad = ctx.createRadialGradient(
-        w * 0.45, h * 0.5, 0,
-        w * 0.5, h * 0.5, w * 0.85
-      )
-      bgGrad.addColorStop(0, "#0f1318")
-      bgGrad.addColorStop(0.6, "#0a0e14")
-      bgGrad.addColorStop(1, "#060810")
-      ctx.fillStyle = bgGrad
-      ctx.fillRect(0, 0, w, h)
-
-      // Subtle tissue texture
-      ctx.globalAlpha = 0.03
-      for (let i = 0; i < 200; i++) {
-        const tx = (i * 137.5) % w
-        const ty = (i * 97.3 + 50) % h
-        ctx.fillStyle = "#5577aa"
-        ctx.fillRect(tx, ty, 1, 1)
+      // Brain tissue background (pre-rendered texture)
+      if (brainTextureRef.current) {
+        ctx.putImageData(brainTextureRef.current, 0, 0)
+        // Scale back since putImageData ignores transforms
+        ctx.save()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.restore()
+      } else {
+        ctx.fillStyle = "#130e12"
+        ctx.fillRect(0, 0, w, h)
       }
-      ctx.globalAlpha = 1
 
-      // ─── Draw vessels ──────────────────────────────────────────
+      // Animated cortical shimmer (very subtle pulsing glow over sulci)
+      const shimmer = Math.sin(s.time * 0.4) * 0.03 + 0.03
+      ctx.save()
+      ctx.globalAlpha = shimmer
+      ctx.lineCap = "round"
+      for (const sulcus of s.sulci) {
+        ctx.strokeStyle = "rgba(60,35,45,1)"
+        ctx.lineWidth = sulcus.width
+        ctx.beginPath()
+        ctx.moveTo(sulcus.x, sulcus.y)
+        ctx.lineTo(
+          sulcus.x + Math.cos(sulcus.angle) * sulcus.len,
+          sulcus.y + Math.sin(sulcus.angle) * sulcus.len
+        )
+        ctx.stroke()
+      }
+      ctx.restore()
+
+      // ─── Draw vessels (cerebral vasculature) ───────────────────
       for (const vessel of s.vessels) {
         const pts = vessel.points
         const r = vessel.radius
 
-        // Vessel wall (outer)
+        // Outer adventitia layer
         ctx.save()
-        ctx.lineWidth = r * 2 + 4
-        ctx.strokeStyle = "rgba(50,25,30,0.6)"
+        ctx.lineWidth = r * 2 + 6
+        ctx.strokeStyle = "rgba(55,20,28,0.5)"
         ctx.lineCap = "round"
         ctx.lineJoin = "round"
         ctx.beginPath()
@@ -363,30 +475,43 @@ export default function UltrasoundSimulation() {
         for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y)
         ctx.stroke()
 
-        // Vessel lumen (inner)
+        // Vessel wall (tunica media)
+        ctx.lineWidth = r * 2 + 3
+        ctx.strokeStyle = "rgba(70,28,35,0.6)"
+        ctx.beginPath()
+        ctx.moveTo(pts[0].x, pts[0].y)
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y)
+        ctx.stroke()
+
+        // Vessel lumen (dark interior with blood)
         ctx.lineWidth = r * 2
         const lumenGrad = ctx.createLinearGradient(0, 0, w, 0)
-        lumenGrad.addColorStop(0, "rgba(40,10,15,0.8)")
-        lumenGrad.addColorStop(0.5, "rgba(55,15,20,0.8)")
-        lumenGrad.addColorStop(1, "rgba(40,10,15,0.8)")
+        lumenGrad.addColorStop(0, "rgba(35,8,12,0.85)")
+        lumenGrad.addColorStop(0.5, "rgba(50,12,18,0.85)")
+        lumenGrad.addColorStop(1, "rgba(35,8,12,0.85)")
         ctx.strokeStyle = lumenGrad
         ctx.beginPath()
         ctx.moveTo(pts[0].x, pts[0].y)
         for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y)
         ctx.stroke()
 
-        // Vessel wall edges (membrane)
-        ctx.lineWidth = 1
-        ctx.strokeStyle = "rgba(120,50,60,0.35)"
+        // Intima (inner membrane highlight)
+        ctx.lineWidth = 0.8
+        ctx.strokeStyle = "rgba(130,50,60,0.3)"
         for (const sign of [-1, 1]) {
           ctx.beginPath()
           for (let i = 0; i < pts.length; i++) {
             const angle =
               i < pts.length - 1
                 ? Math.atan2(pts[i + 1].y - pts[i].y, pts[i + 1].x - pts[i].x)
-                : Math.atan2(pts[i].y - pts[i - 1].y, pts[i].x - pts[i - 1].x)
-            const nx = pts[i].x + Math.cos(angle + (sign * Math.PI) / 2) * r
-            const ny = pts[i].y + Math.sin(angle + (sign * Math.PI) / 2) * r
+                : Math.atan2(
+                    pts[i].y - pts[i - 1].y,
+                    pts[i].x - pts[i - 1].x
+                  )
+            const nx =
+              pts[i].x + Math.cos(angle + (sign * Math.PI) / 2) * (r - 0.5)
+            const ny =
+              pts[i].y + Math.sin(angle + (sign * Math.PI) / 2) * (r - 0.5)
             if (i === 0) ctx.moveTo(nx, ny)
             else ctx.lineTo(nx, ny)
           }
@@ -447,7 +572,9 @@ export default function UltrasoundSimulation() {
         ctx.fill()
 
         // Central dimple
-        ctx.fillStyle = isGlowing ? "rgba(90,12,12,0.5)" : "rgba(50,6,6,0.55)"
+        ctx.fillStyle = isGlowing
+          ? "rgba(90,12,12,0.5)"
+          : "rgba(50,6,6,0.55)"
         ctx.beginPath()
         ctx.ellipse(0, 0, r * 0.32, r * 0.2, 0, 0, Math.PI * 2)
         ctx.fill()
@@ -455,13 +582,21 @@ export default function UltrasoundSimulation() {
         // Highlight
         ctx.fillStyle = "rgba(255,255,255,0.07)"
         ctx.beginPath()
-        ctx.ellipse(-r * 0.2, -r * 0.12, r * 0.28, r * 0.12, -0.3, 0, Math.PI * 2)
+        ctx.ellipse(
+          -r * 0.2,
+          -r * 0.12,
+          r * 0.28,
+          r * 0.12,
+          -0.3,
+          0,
+          Math.PI * 2
+        )
         ctx.fill()
 
         ctx.shadowBlur = 0
         ctx.restore()
 
-        // RBC label (only for labeled ones)
+        // RBC label
         if (rbc.labeled) {
           ctx.save()
           ctx.font = "600 11px system-ui, sans-serif"
@@ -472,7 +607,6 @@ export default function UltrasoundSimulation() {
           const lx = pos.x + rbc.size + 6
           const ly = pos.y - rbc.size - 6
 
-          // Leader line
           ctx.strokeStyle = "rgba(255,100,100,0.4)"
           ctx.lineWidth = 0.8
           ctx.setLineDash([3, 2])
@@ -482,19 +616,30 @@ export default function UltrasoundSimulation() {
           ctx.stroke()
           ctx.setLineDash([])
 
-          // Label background
           const text = "Red Blood Cell"
           const tm = ctx.measureText(text)
           const px = 5
           const py = 3
-          ctx.fillStyle = "rgba(10,12,18,0.85)"
+          ctx.fillStyle = "rgba(10,8,10,0.9)"
           ctx.beginPath()
-          ctx.roundRect(lx - px, ly - 7 - py, tm.width + px * 2, 14 + py * 2, 3)
+          ctx.roundRect(
+            lx - px,
+            ly - 7 - py,
+            tm.width + px * 2,
+            14 + py * 2,
+            3
+          )
           ctx.fill()
           ctx.strokeStyle = "rgba(255,100,100,0.5)"
           ctx.lineWidth = 0.8
           ctx.beginPath()
-          ctx.roundRect(lx - px, ly - 7 - py, tm.width + px * 2, 14 + py * 2, 3)
+          ctx.roundRect(
+            lx - px,
+            ly - 7 - py,
+            tm.width + px * 2,
+            14 + py * 2,
+            3
+          )
           ctx.stroke()
 
           ctx.fillStyle = "rgba(255,100,100,0.9)"
@@ -503,13 +648,16 @@ export default function UltrasoundSimulation() {
         }
       }
 
-      // ─── Incident pulse wavefront ────��───────��────────────────
+      // ─── Incident pulse wavefront ─────────────────────────────
       if (s.pulse.active && s.pulse.x > PROBE_FACE_X) {
         ctx.save()
         ctx.globalAlpha = s.pulse.opacity
 
         const wfGrad = ctx.createLinearGradient(
-          s.pulse.x, probeTop, s.pulse.x, probeBot
+          s.pulse.x,
+          probeTop,
+          s.pulse.x,
+          probeBot
         )
         wfGrad.addColorStop(0, "rgba(56,189,248,0)")
         wfGrad.addColorStop(0.05, "rgba(56,189,248,0.85)")
@@ -536,12 +684,12 @@ export default function UltrasoundSimulation() {
         ctx.restore()
       }
 
-      // ─── Transducer probe (detailed) ───────────────────────────
+      // ─── Transducer probe ─────────────────────────────────────
       const faceX = PROBE_FACE_X
       const housingLeft = faceX - PROBE_HOUSING_WIDTH
       const bodyLeft = housingLeft - PROBE_BODY_WIDTH
 
-      // Probe body (wider tapered section)
+      // Probe body
       const bodyGrad = ctx.createLinearGradient(bodyLeft, 0, housingLeft, 0)
       bodyGrad.addColorStop(0, "#0e1520")
       bodyGrad.addColorStop(0.4, "#18273a")
@@ -558,7 +706,6 @@ export default function UltrasoundSimulation() {
       ctx.closePath()
       ctx.fill()
 
-      // Body outline
       ctx.strokeStyle = "rgba(56,189,248,0.1)"
       ctx.lineWidth = 1
       ctx.beginPath()
@@ -569,7 +716,7 @@ export default function UltrasoundSimulation() {
       ctx.closePath()
       ctx.stroke()
 
-      // Cable indication at far left
+      // Cable
       ctx.strokeStyle = "rgba(56,189,248,0.07)"
       ctx.lineWidth = 8
       ctx.lineCap = "round"
@@ -595,7 +742,6 @@ export default function UltrasoundSimulation() {
       )
       ctx.fill()
 
-      // Housing outline
       ctx.strokeStyle = "rgba(56,189,248,0.12)"
       ctx.lineWidth = 1
       ctx.beginPath()
@@ -617,18 +763,21 @@ export default function UltrasoundSimulation() {
 
       for (let i = 0; i < NUM_ELEMENTS; i++) {
         const ey = probeTop + i * (elementH + elementGap)
-
-        // Piezo element
         const active =
           s.pulse.active && s.pulse.x < faceX + 30 && s.pulse.x >= faceX - 5
 
-        // Gap background (dark separator between elements)
+        // Dark separator
         if (i > 0) {
           ctx.fillStyle = "#080d14"
-          ctx.fillRect(elementLeft - 1, ey - elementGap, elementW + 2, elementGap)
+          ctx.fillRect(
+            elementLeft - 1,
+            ey - elementGap,
+            elementW + 2,
+            elementGap
+          )
         }
 
-        // Element fill - stronger, more saturated colours
+        // Element fill
         const elGrad = ctx.createLinearGradient(elementLeft, 0, faceX, 0)
         if (active) {
           elGrad.addColorStop(0, "rgba(56,189,248,0.3)")
@@ -643,14 +792,13 @@ export default function UltrasoundSimulation() {
         ctx.fillStyle = elGrad
         ctx.fillRect(elementLeft, ey, elementW, elementH)
 
-        // Element border - stronger
         ctx.strokeStyle = active
           ? "rgba(56,189,248,0.7)"
           : "rgba(56,189,248,0.25)"
         ctx.lineWidth = 0.8
         ctx.strokeRect(elementLeft, ey, elementW, elementH)
 
-        // Inner highlight line on each element
+        // Inner highlight
         ctx.strokeStyle = active
           ? "rgba(140,220,255,0.35)"
           : "rgba(56,189,248,0.08)"
@@ -664,23 +812,25 @@ export default function UltrasoundSimulation() {
       // Emitting face bright edge
       ctx.save()
       ctx.shadowColor = "#38bdf8"
-      ctx.shadowBlur = s.pulse.active && s.pulse.x < faceX + 30 ? 20 : 6
-      ctx.fillStyle = s.pulse.active && s.pulse.x < faceX + 30
-        ? "rgba(56,189,248,0.8)"
-        : "rgba(56,189,248,0.3)"
+      ctx.shadowBlur =
+        s.pulse.active && s.pulse.x < faceX + 30 ? 20 : 6
+      ctx.fillStyle =
+        s.pulse.active && s.pulse.x < faceX + 30
+          ? "rgba(56,189,248,0.8)"
+          : "rgba(56,189,248,0.3)"
       ctx.fillRect(faceX - 1.5, probeTop, 1.5, probeH)
       ctx.restore()
 
-      // ─── Matching layer (thin strip between elements and face) ─
+      // Matching layer
       ctx.fillStyle = "rgba(70,130,170,0.15)"
       ctx.fillRect(faceX - 3, probeTop, 3, probeH)
 
-      // ─── Backing material (behind elements) ────────────────────
+      // Backing material
       const backingW = PROBE_HOUSING_WIDTH - elementW
       ctx.fillStyle = "rgba(15,25,35,0.8)"
       ctx.fillRect(housingLeft, probeTop, backingW, probeH)
 
-      // Tiny wiring lines inside housing
+      // Tiny wiring lines
       ctx.strokeStyle = "rgba(56,189,248,0.06)"
       ctx.lineWidth = 0.5
       for (let i = 0; i < NUM_ELEMENTS; i += 4) {
@@ -701,7 +851,6 @@ export default function UltrasoundSimulation() {
       const labelX = (bodyLeft + housingLeft) / 2
       const labelY = probeTop - 30
 
-      // Leader line from probe body up
       ctx.strokeStyle = "rgba(56,189,248,0.3)"
       ctx.lineWidth = 0.8
       ctx.setLineDash([3, 2])
@@ -711,12 +860,11 @@ export default function UltrasoundSimulation() {
       ctx.stroke()
       ctx.setLineDash([])
 
-      // Label background
       const probeLabel = "Transducer Probe"
       const plm = ctx.measureText(probeLabel)
       const lpx = 8
       const lpy = 4
-      ctx.fillStyle = "rgba(10,12,18,0.85)"
+      ctx.fillStyle = "rgba(10,8,10,0.9)"
       ctx.beginPath()
       ctx.roundRect(
         labelX - plm.width / 2 - lpx,
@@ -754,7 +902,7 @@ export default function UltrasoundSimulation() {
         clearTimeout(stateRef.current.restartTimer)
       }
     }
-  }, [buildVessels, buildRBCs])
+  }, [buildVessels, buildRBCs, buildSulci, buildBrainTexture])
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
@@ -763,7 +911,7 @@ export default function UltrasoundSimulation() {
         className="w-full h-screen"
         style={{ imageRendering: "auto" }}
         role="img"
-        aria-label="Animation of ultrasound pulse propagating through blood vessels and producing spherical echoes off red blood cells"
+        aria-label="Animation of ultrasound pulse propagating through cerebral blood vessels and producing spherical echoes off red blood cells"
       />
     </div>
   )
