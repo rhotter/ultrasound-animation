@@ -50,7 +50,7 @@ const NUM_ELEMENTS = 32
 const SKULL_THICKNESS = 28
 const SKULL_LEFT = PROBE_FACE_X + 4
 const SKULL_RIGHT = SKULL_LEFT + SKULL_THICKNESS
-const MAX_ECHOES = 20
+const MAX_ECHOES = 200
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t
