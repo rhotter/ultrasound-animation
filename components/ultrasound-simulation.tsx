@@ -94,18 +94,25 @@ export default function UltrasoundSimulation() {
 
   const buildVessels = useCallback((w: number, h: number): Vessel[] => {
     const vessels: Vessel[] = []
+    const margin = 20 // keep vessels away from edges
+    const probeTop = h * PROBE_TOP_FRAC
+    const probeBot = h * PROBE_BOT_FRAC
 
-    // Large horizontal vessel (artery)
+    // Clamp points to stay within the beam field of view
+    const clampY = (y: number) => Math.max(probeTop + margin, Math.min(probeBot - margin, y))
+
+    // Large horizontal vessel (artery) - stays in middle
     {
       const pts: { x: number; y: number }[] = []
       const cy = h * 0.48
       for (let i = 0; i <= 40; i++) {
         const frac = i / 40
-        const x = frac * w
-        const y =
+        const x = PROBE_FACE_X + 20 + frac * (w - PROBE_FACE_X - 40)
+        const y = clampY(
           cy +
           Math.sin(frac * Math.PI * 2.5) * h * 0.04 +
           Math.sin(frac * Math.PI * 5) * h * 0.015
+        )
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.045 })
@@ -114,14 +121,15 @@ export default function UltrasoundSimulation() {
     // Upper smaller vessel
     {
       const pts: { x: number; y: number }[] = []
-      const cy = h * 0.2
+      const cy = h * 0.25
       for (let i = 0; i <= 35; i++) {
         const frac = i / 35
-        const x = frac * w
-        const y =
+        const x = PROBE_FACE_X + 20 + frac * (w - PROBE_FACE_X - 40)
+        const y = clampY(
           cy +
-          Math.sin(frac * Math.PI * 1.8 + 0.5) * h * 0.06 +
+          Math.sin(frac * Math.PI * 1.8 + 0.5) * h * 0.04 +
           Math.cos(frac * Math.PI * 4) * h * 0.01
+        )
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.028 })
@@ -130,44 +138,47 @@ export default function UltrasoundSimulation() {
     // Lower vessel
     {
       const pts: { x: number; y: number }[] = []
-      const cy = h * 0.76
+      const cy = h * 0.72
       for (let i = 0; i <= 35; i++) {
         const frac = i / 35
-        const x = frac * w
-        const y =
+        const x = PROBE_FACE_X + 20 + frac * (w - PROBE_FACE_X - 40)
+        const y = clampY(
           cy +
-          Math.sin(frac * Math.PI * 2 + 1) * h * 0.05 +
+          Math.sin(frac * Math.PI * 2 + 1) * h * 0.04 +
           Math.sin(frac * Math.PI * 3.5) * h * 0.012
+        )
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.032 })
     }
 
-    // Branching capillary (diagonal upper-right)
+    // Branching capillary (diagonal upper)
     {
       const pts: { x: number; y: number }[] = []
       for (let i = 0; i <= 25; i++) {
         const frac = i / 25
-        const x = w * 0.35 + frac * w * 0.55
-        const y =
-          h * 0.38 -
-          frac * h * 0.22 +
+        const x = PROBE_FACE_X + 20 + w * 0.2 + frac * (w * 0.5)
+        const y = clampY(
+          h * 0.42 -
+          frac * h * 0.15 +
           Math.sin(frac * Math.PI * 3) * h * 0.02
+        )
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.018 })
     }
 
-    // Branching capillary (diagonal lower-right)
+    // Branching capillary (diagonal lower)
     {
       const pts: { x: number; y: number }[] = []
       for (let i = 0; i <= 25; i++) {
         const frac = i / 25
-        const x = w * 0.4 + frac * w * 0.5
-        const y =
-          h * 0.56 +
-          frac * h * 0.18 +
+        const x = PROBE_FACE_X + 20 + w * 0.25 + frac * (w * 0.45)
+        const y = clampY(
+          h * 0.55 +
+          frac * h * 0.12 +
           Math.sin(frac * Math.PI * 2.5 + 1) * h * 0.02
+        )
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.02 })
@@ -279,11 +290,11 @@ export default function UltrasoundSimulation() {
           if (rbc.hit) continue
           const vessel = s.vessels[rbc.vesselIdx]
           const pos = getVesselPoint(vessel, rbc.t)
-          if (
-            s.pulse.x >= pos.x - rbc.size &&
-            pos.y >= probeTop &&
-            pos.y <= probeBot
-          ) {
+          // Only hit RBCs that are within the visible canvas AND within the beam field of view
+          const inCanvas = pos.x >= 0 && pos.x <= w && pos.y >= 0 && pos.y <= h
+          const inBeam = pos.y >= probeTop && pos.y <= probeBot
+          const pulseReached = s.pulse.x >= pos.x - rbc.size
+          if (inCanvas && inBeam && pulseReached) {
             rbc.hit = true
             rbc.hitTime = s.time
             s.echoes.push({
