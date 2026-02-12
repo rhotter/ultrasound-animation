@@ -76,6 +76,7 @@ function getVesselPoint(
 export default function UltrasoundSimulation() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animFrameRef = useRef<number>(0)
+  const lastTimeRef = useRef<number>(0)
   const stateRef = useRef<{
     vessels: Vessel[]
     rbcs: RBC[]
@@ -284,15 +285,21 @@ export default function UltrasoundSimulation() {
       s.restartTimer = null
     }
 
-    const animate = () => {
+    const animate = (timestamp: number) => {
       const s = stateRef.current
       if (!s.initialized) {
+        lastTimeRef.current = timestamp
         animFrameRef.current = requestAnimationFrame(animate)
         return
       }
 
+      // Real delta time, capped to avoid spiral of death
+      const rawDt = lastTimeRef.current ? (timestamp - lastTimeRef.current) / 1000 : 0.016
+      const dt = Math.min(rawDt, 0.033) // cap at ~30fps equivalent
+      lastTimeRef.current = timestamp
+
       const { w, h } = s.dims
-      s.time += 0.016
+      s.time += dt
 
       const probeTop = h * PROBE_TOP_FRAC
       const probeBot = h * PROBE_BOT_FRAC
@@ -314,11 +321,12 @@ export default function UltrasoundSimulation() {
           if (rbc.hit) continue
           const vessel = s.vessels[rbc.vesselIdx]
           const pos = getVesselPoint(vessel, rbc.t)
-          const inCanvas =
-            pos.x >= 0 && pos.x <= w && pos.y >= 0 && pos.y <= h
+          // Only hit RBCs that are in front of the probe face, within canvas, and in the beam
+          const inFrontOfProbe = pos.x >= PROBE_FACE_X + rbc.size
+          const inCanvas = pos.x <= w && pos.y >= 0 && pos.y <= h
           const inBeam = pos.y >= probeTop && pos.y <= probeBot
           const pulseReached = s.pulse.x >= pos.x - rbc.size
-          if (inCanvas && inBeam && pulseReached) {
+          if (inFrontOfProbe && inCanvas && inBeam && pulseReached) {
             rbc.hit = true
             rbc.hitTime = s.time
             s.echoes.push({
@@ -339,9 +347,16 @@ export default function UltrasoundSimulation() {
       // ─── Update echoes ─────────────────────────────────────────
       for (const echo of s.echoes) {
         echo.radius += ECHO_SPEED
-        echo.opacity = Math.max(0, 0.9 - (s.time - echo.birthTime) * 0.1)
+        echo.opacity = Math.max(0, 0.9 - (s.time - echo.birthTime) * 0.12)
       }
-      s.echoes = s.echoes.filter((e) => e.opacity > 0.01)
+      // Aggressively prune: remove faded echoes and any that have expanded well past the probe
+      s.echoes = s.echoes.filter((e) => {
+        if (e.opacity < 0.02) return false
+        // If echo has expanded far enough to cover the whole scene, remove it
+        const maxDim = Math.max(w, h)
+        if (e.radius > maxDim * 1.5) return false
+        return true
+      })
 
       // ─── Detect echoes hitting transducer elements (per-element timing) ──
       const elementGapCalc = 2.5
@@ -448,6 +463,14 @@ export default function UltrasoundSimulation() {
 
       // ─── Spherical echoes ──────────────────────────────────────
       for (const echo of s.echoes) {
+        // Skip if echo circle is entirely off-screen
+        if (
+          echo.cx + echo.radius < 0 ||
+          echo.cx - echo.radius > w ||
+          echo.cy + echo.radius < 0 ||
+          echo.cy - echo.radius > h
+        ) continue
+
         ctx.save()
         ctx.globalAlpha = echo.opacity * 0.7
         ctx.strokeStyle = "#ff5555"
@@ -456,14 +479,6 @@ export default function UltrasoundSimulation() {
         ctx.shadowBlur = 6
         ctx.beginPath()
         ctx.arc(echo.cx, echo.cy, echo.radius, 0, Math.PI * 2)
-        ctx.stroke()
-        ctx.shadowBlur = 0
-
-        ctx.globalAlpha = echo.opacity * 0.2
-        ctx.strokeStyle = "#ffaaaa"
-        ctx.lineWidth = 0.5
-        ctx.beginPath()
-        ctx.arc(echo.cx, echo.cy, echo.radius * 0.95, 0, Math.PI * 2)
         ctx.stroke()
         ctx.restore()
       }
