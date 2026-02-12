@@ -104,6 +104,7 @@ export default function UltrasoundSimulation() {
     dims: { w: number; h: number }
     elementActivations: number[]
     hintOpacity: number
+    probeHovered: boolean
   }>({
     vessels: [],
     rbcs: [],
@@ -115,6 +116,7 @@ export default function UltrasoundSimulation() {
     dims: { w: 0, h: 0 },
     elementActivations: new Array(NUM_ELEMENTS).fill(0),
     hintOpacity: 1,
+    probeHovered: false,
   })
 
   const buildVessels = useCallback((w: number, h: number): Vessel[] => {
@@ -521,11 +523,33 @@ export default function UltrasoundSimulation() {
       s.hintOpacity = 0
     }
 
+    const isOverProbe = (clientX: number, clientY: number) => {
+      const rect = canvas.getBoundingClientRect()
+      const x = clientX - rect.left
+      const y = clientY - rect.top
+      const h = rect.height
+      const probeTop = h * PROBE_TOP_FRAC - 6
+      const probeBot = h * PROBE_BOT_FRAC + 6
+      return x <= PROBE_FACE_X && y >= probeTop && y <= probeBot
+    }
+
+    const onMouseMove = (e: MouseEvent) => {
+      const hovered = isOverProbe(e.clientX, e.clientY)
+      stateRef.current.probeHovered = hovered
+      canvas.style.cursor = hovered ? "pointer" : "default"
+    }
+    const onMouseLeave = () => {
+      stateRef.current.probeHovered = false
+      canvas.style.cursor = "default"
+    }
+
     const onKey = (e: KeyboardEvent) => { if (e.code === "Space") { e.preventDefault(); firePulse() } }
     const onClick = () => firePulse()
     window.addEventListener("keydown", onKey)
     canvas.addEventListener("click", onClick)
     canvas.addEventListener("touchstart", onClick, { passive: true })
+    canvas.addEventListener("mousemove", onMouseMove)
+    canvas.addEventListener("mouseleave", onMouseLeave)
 
     const animate = (timestamp: number) => {
       const s = stateRef.current
@@ -762,6 +786,47 @@ export default function UltrasoundSimulation() {
         ctx.restore()
       }
 
+      // ─── Probe hover glow ──────────────────────────────────────
+      if (s.probeHovered) {
+        ctx.save()
+        const hFaceX = PROBE_FACE_X
+        const hHousingLeft = hFaceX - PROBE_HOUSING_WIDTH
+        const hBodyLeft = hHousingLeft - PROBE_BODY_WIDTH
+        const hMidY = (probeTop + probeBot) / 2
+        const hHeadTop = probeTop - 6
+        const hHeadBot = probeBot + 6
+        const hNeckTop = probeTop + probeH * 0.12
+        const hNeckBot = probeBot - probeH * 0.12
+        const hGripW = 62
+        const hGripLeft = hBodyLeft - hGripW
+        const hGripTop = hMidY - probeH * 0.18
+        const hGripBot = hMidY + probeH * 0.18
+        const hHandleW = 50
+        const hHandleLeft = hGripLeft - hHandleW
+        const hHandleTop = hMidY - probeH * 0.12
+        const hHandleBot = hMidY + probeH * 0.12
+
+        ctx.globalAlpha = 0.12 + Math.sin(s.time * 3) * 0.04
+        ctx.fillStyle = "#38bdf8"
+        ctx.beginPath()
+        ctx.moveTo(hHandleLeft, hHandleTop)
+        ctx.lineTo(hGripLeft, hHandleTop)
+        ctx.bezierCurveTo(hGripLeft, hGripTop - 8, hGripLeft + hGripW * 0.6, hGripTop, hGripLeft + hGripW, hNeckTop)
+        ctx.lineTo(hBodyLeft, probeTop + probeH * 0.06)
+        ctx.lineTo(hHousingLeft, hHeadTop)
+        ctx.lineTo(hFaceX, hHeadTop)
+        ctx.lineTo(hFaceX, hHeadBot)
+        ctx.lineTo(hHousingLeft, hHeadBot)
+        ctx.lineTo(hBodyLeft, probeBot - probeH * 0.06)
+        ctx.lineTo(hGripLeft + hGripW, hNeckBot)
+        ctx.bezierCurveTo(hGripLeft + hGripW * 0.6, hGripBot, hGripLeft, hGripBot + 8, hGripLeft, hHandleBot)
+        ctx.lineTo(hHandleLeft, hHandleBot)
+        ctx.closePath()
+        ctx.fill()
+        ctx.globalAlpha = 1
+        ctx.restore()
+      }
+
       // ─── Dynamic elements on top of static probe ──────────────
       const faceX = PROBE_FACE_X
       const elementW = PROBE_HOUSING_WIDTH * 0.55
@@ -846,6 +911,8 @@ export default function UltrasoundSimulation() {
       window.removeEventListener("keydown", onKey)
       canvas.removeEventListener("click", onClick)
       canvas.removeEventListener("touchstart", onClick)
+      canvas.removeEventListener("mousemove", onMouseMove)
+      canvas.removeEventListener("mouseleave", onMouseLeave)
       window.removeEventListener("resize", resize)
       cancelAnimationFrame(animFrameRef.current)
     }
