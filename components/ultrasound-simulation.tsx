@@ -455,7 +455,7 @@ export default function UltrasoundSimulation() {
     ctx.setLineDash([3, 2])
     ctx.beginPath(); ctx.moveTo(labelX, gripTop - 2); ctx.lineTo(labelX, labelY + 10); ctx.stroke()
     ctx.setLineDash([])
-    const probeLabel = "Transducer Probe"
+    const probeLabel = "Ultrasound Transducer"
     const plm = ctx.measureText(probeLabel)
     ctx.fillStyle = "rgba(10,8,10,0.9)"
     ctx.beginPath(); ctx.roundRect(labelX - plm.width / 2 - 8, labelY - 11, plm.width + 16, 22, 3); ctx.fill()
