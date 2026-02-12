@@ -49,6 +49,9 @@ const PROBE_BODY_WIDTH = 46
 const PULSE_WIDTH = 3
 const NUM_ELEMENTS = 32
 const RESTART_DELAY = 1800
+const SKULL_THICKNESS = 28 // temporal bone thickness in px
+const SKULL_LEFT = PROBE_FACE_X + 4 // small gap for coupling gel
+const SKULL_RIGHT = SKULL_LEFT + SKULL_THICKNESS
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t
@@ -321,8 +324,8 @@ export default function UltrasoundSimulation() {
           if (rbc.hit) continue
           const vessel = s.vessels[rbc.vesselIdx]
           const pos = getVesselPoint(vessel, rbc.t)
-          // Only hit RBCs that are in front of the probe face, within canvas, and in the beam
-          const inFrontOfProbe = pos.x >= PROBE_FACE_X + rbc.size
+          // Only hit RBCs that are past the skull, within canvas, and in the beam
+          const inFrontOfProbe = pos.x >= SKULL_RIGHT + rbc.size
           const inCanvas = pos.x <= w && pos.y >= 0 && pos.y <= h
           const inBeam = pos.y >= probeTop && pos.y <= probeBot
           const pulseReached = s.pulse.x >= pos.x - rbc.size
@@ -399,6 +402,155 @@ export default function UltrasoundSimulation() {
 
       ctx.fillStyle = "#0a0a0f"
       ctx.fillRect(0, 0, w, h)
+
+      // ─── Temporal bone (skull layer) ───────────────────────────
+      {
+        const skullTop = probeTop - 6
+        const skullBot = probeBot + 6
+        const skullH = skullBot - skullTop
+
+        // Outer table (compact bone)
+        const outerW = SKULL_THICKNESS * 0.3
+        const outerGrad = ctx.createLinearGradient(SKULL_LEFT, 0, SKULL_LEFT + outerW, 0)
+        outerGrad.addColorStop(0, "#d4c9b8")
+        outerGrad.addColorStop(0.5, "#c8bba8")
+        outerGrad.addColorStop(1, "#bfb198")
+        ctx.fillStyle = outerGrad
+        ctx.fillRect(SKULL_LEFT, skullTop, outerW, skullH)
+
+        // Diploe (spongy bone, middle layer) -- porous texture
+        const diploeLeft = SKULL_LEFT + outerW
+        const diploeW = SKULL_THICKNESS * 0.45
+        const diploeGrad = ctx.createLinearGradient(diploeLeft, 0, diploeLeft + diploeW, 0)
+        diploeGrad.addColorStop(0, "#b5a58f")
+        diploeGrad.addColorStop(0.5, "#c9b99e")
+        diploeGrad.addColorStop(1, "#b5a58f")
+        ctx.fillStyle = diploeGrad
+        ctx.fillRect(diploeLeft, skullTop, diploeW, skullH)
+
+        // Spongy pores in the diploe
+        ctx.fillStyle = "rgba(80,65,48,0.35)"
+        const poreSpacingY = 6
+        const poreSpacingX = 7
+        for (let py = skullTop + 3; py < skullBot - 3; py += poreSpacingY) {
+          for (let px = diploeLeft + 2; px < diploeLeft + diploeW - 2; px += poreSpacingX) {
+            const offsetX = ((py / poreSpacingY) % 2) * 3
+            const rx = 1.0 + Math.sin(px * 0.7 + py * 0.3) * 0.6
+            const ry = 0.8 + Math.cos(px * 0.5 + py * 0.8) * 0.4
+            ctx.beginPath()
+            ctx.ellipse(px + offsetX, py, rx, ry, 0, 0, Math.PI * 2)
+            ctx.fill()
+          }
+        }
+
+        // Inner table (compact bone)
+        const innerLeft = diploeLeft + diploeW
+        const innerW = SKULL_THICKNESS * 0.25
+        const innerGrad = ctx.createLinearGradient(innerLeft, 0, innerLeft + innerW, 0)
+        innerGrad.addColorStop(0, "#bfb198")
+        innerGrad.addColorStop(0.5, "#c5b7a3")
+        innerGrad.addColorStop(1, "#a89880")
+        ctx.fillStyle = innerGrad
+        ctx.fillRect(innerLeft, skullTop, innerW, skullH)
+
+        // Subtle periosteum line on outer surface
+        ctx.strokeStyle = "rgba(180,165,140,0.6)"
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.moveTo(SKULL_LEFT, skullTop)
+        ctx.lineTo(SKULL_LEFT, skullBot)
+        ctx.stroke()
+
+        // Subtle dura mater line on inner surface
+        ctx.strokeStyle = "rgba(120,100,75,0.5)"
+        ctx.lineWidth = 1.2
+        ctx.beginPath()
+        ctx.moveTo(SKULL_RIGHT, skullTop)
+        ctx.lineTo(SKULL_RIGHT, skullBot)
+        ctx.stroke()
+
+        // Outer border lines for the bone edges
+        ctx.strokeStyle = "rgba(90,78,60,0.4)"
+        ctx.lineWidth = 0.6
+        ctx.beginPath()
+        ctx.moveTo(SKULL_LEFT, skullTop)
+        ctx.lineTo(SKULL_RIGHT, skullTop)
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(SKULL_LEFT, skullBot)
+        ctx.lineTo(SKULL_RIGHT, skullBot)
+        ctx.stroke()
+
+        // Layer division lines
+        ctx.strokeStyle = "rgba(100,85,65,0.3)"
+        ctx.lineWidth = 0.5
+        ctx.setLineDash([2, 3])
+        ctx.beginPath()
+        ctx.moveTo(diploeLeft, skullTop)
+        ctx.lineTo(diploeLeft, skullBot)
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(innerLeft, skullTop)
+        ctx.lineTo(innerLeft, skullBot)
+        ctx.stroke()
+        ctx.setLineDash([])
+
+        // ─── "Temporal Bone" label ───────────────────────────────
+        ctx.save()
+        ctx.font = "600 10px system-ui, sans-serif"
+        ctx.textAlign = "center"
+        ctx.textBaseline = "middle"
+
+        const boneLabelX = SKULL_LEFT + SKULL_THICKNESS / 2
+        const boneLabelY = skullTop - 16
+
+        // Leader line
+        ctx.strokeStyle = "rgba(200,180,150,0.35)"
+        ctx.lineWidth = 0.8
+        ctx.setLineDash([3, 2])
+        ctx.beginPath()
+        ctx.moveTo(boneLabelX, skullTop - 2)
+        ctx.lineTo(boneLabelX, boneLabelY + 8)
+        ctx.stroke()
+        ctx.setLineDash([])
+
+        const boneText = "Temporal Bone"
+        const boneTm = ctx.measureText(boneText)
+        const bpx = 6
+        const bpy = 3
+        ctx.fillStyle = "rgba(10,8,10,0.9)"
+        ctx.beginPath()
+        ctx.roundRect(
+          boneLabelX - boneTm.width / 2 - bpx,
+          boneLabelY - 6 - bpy,
+          boneTm.width + bpx * 2,
+          12 + bpy * 2,
+          3
+        )
+        ctx.fill()
+        ctx.strokeStyle = "rgba(200,180,150,0.4)"
+        ctx.lineWidth = 0.8
+        ctx.beginPath()
+        ctx.roundRect(
+          boneLabelX - boneTm.width / 2 - bpx,
+          boneLabelY - 6 - bpy,
+          boneTm.width + bpx * 2,
+          12 + bpy * 2,
+          3
+        )
+        ctx.stroke()
+
+        ctx.fillStyle = "rgba(210,195,170,0.85)"
+        ctx.fillText(boneText, boneLabelX, boneLabelY)
+        ctx.restore()
+
+        // Coupling gel indicator (thin strip between probe face and skull)
+        const gelGrad = ctx.createLinearGradient(PROBE_FACE_X, 0, SKULL_LEFT, 0)
+        gelGrad.addColorStop(0, "rgba(56,189,248,0.12)")
+        gelGrad.addColorStop(1, "rgba(56,189,248,0.04)")
+        ctx.fillStyle = gelGrad
+        ctx.fillRect(PROBE_FACE_X, probeTop, SKULL_LEFT - PROBE_FACE_X, probeH)
+      }
 
       // ─── Draw vessels (cerebral vasculature) ───────────────────
       for (const vessel of s.vessels) {
