@@ -16,7 +16,7 @@ interface RBC {
   size: number
   rotation: number
   rotSpeed: number
-  hit: boolean
+  hitByPulses: Set<number>
   hitTime: number
   labeled: boolean
   clumpId: number
@@ -32,9 +32,9 @@ interface SphericalEcho {
 }
 
 interface PulseWave {
+  id: number
   x: number
   opacity: number
-  active: boolean
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -97,7 +97,8 @@ export default function UltrasoundSimulation() {
     vessels: Vessel[]
     rbcs: RBC[]
     echoes: SphericalEcho[]
-    pulse: PulseWave
+    pulses: PulseWave[]
+    nextPulseId: number
     time: number
     initialized: boolean
     dims: { w: number; h: number }
@@ -107,7 +108,8 @@ export default function UltrasoundSimulation() {
     vessels: [],
     rbcs: [],
     echoes: [],
-    pulse: { x: 0, opacity: 1, active: true },
+    pulses: [],
+    nextPulseId: 0,
     time: 0,
     initialized: false,
     dims: { w: 0, h: 0 },
@@ -206,7 +208,7 @@ export default function UltrasoundSimulation() {
           size: 3 + Math.random() * 2.5,
           rotation: Math.random() * Math.PI * 2,
           rotSpeed: (Math.random() - 0.5) * 0.02,
-          hit: false, hitTime: 0, labeled,
+          hitByPulses: new Set(), hitTime: 0, labeled,
           clumpId: -1, clumpOffset: 0,
         })
       }
@@ -221,7 +223,7 @@ export default function UltrasoundSimulation() {
             size: 3 + Math.random() * 2,
             rotation: Math.random() * Math.PI * 2,
             rotSpeed: (Math.random() - 0.5) * 0.015,
-            hit: false, hitTime: 0, labeled: false,
+            hitByPulses: new Set(), hitTime: 0, labeled: false,
             clumpId: cid, clumpOffset: offset,
           })
         }
@@ -503,7 +505,7 @@ export default function UltrasoundSimulation() {
       s.vessels = buildVessels(w, h)
       s.rbcs = buildRBCs()
       s.echoes = []
-      s.pulse = { x: PROBE_FACE_X, opacity: 1, active: true }
+      s.pulses = [{ id: s.nextPulseId++, x: PROBE_FACE_X, opacity: 1 }]
       s.time = 0
       s.initialized = true
       staticDirtyRef.current = true
@@ -515,10 +517,7 @@ export default function UltrasoundSimulation() {
     const firePulse = () => {
       const s = stateRef.current
       if (!s.initialized) return
-      for (const rbc of s.rbcs) { rbc.hit = false; rbc.hitTime = 0 }
-      s.echoes = []
-      s.pulse = { x: PROBE_FACE_X, opacity: 1, active: true }
-      s.elementActivations.fill(0)
+      s.pulses.push({ id: s.nextPulseId++, x: PROBE_FACE_X - 3, opacity: 1 })
       s.hintOpacity = 0
     }
 
@@ -554,21 +553,22 @@ export default function UltrasoundSimulation() {
         rbc.rotation += rbc.rotSpeed
       }
 
-      if (s.pulse.active) {
-        s.pulse.x += WAVE_SPEED
+      for (let pi = s.pulses.length - 1; pi >= 0; pi--) {
+        const pulse = s.pulses[pi]
+        pulse.x += WAVE_SPEED
         for (const rbc of s.rbcs) {
-          if (rbc.hit) continue
+          if (rbc.hitByPulses.has(pulse.id)) continue
           const pos = getVesselPoint(s.vessels[rbc.vesselIdx], rbc.t)
           if (pos.x >= SKULL_RIGHT + rbc.size && pos.x <= w && pos.y >= 0 && pos.y <= h &&
-              pos.y >= probeTop && pos.y <= probeBot && s.pulse.x >= pos.x - rbc.size) {
-            rbc.hit = true
+              pos.y >= probeTop && pos.y <= probeBot && pulse.x >= pos.x - rbc.size) {
+            rbc.hitByPulses.add(pulse.id)
             rbc.hitTime = s.time
             if (s.echoes.length < MAX_ECHOES) {
               s.echoes.push({ cx: pos.x, cy: pos.y, radius: rbc.size + 1, opacity: 0.9, birthTime: s.time })
             }
           }
         }
-        if (s.pulse.x > w + 20) s.pulse.active = false
+        if (pulse.x > w + 20) s.pulses.splice(pi, 1)
       }
 
       for (let i = s.echoes.length - 1; i >= 0; i--) {
@@ -603,7 +603,7 @@ export default function UltrasoundSimulation() {
       }
 
       // Fade hint after echoes finish
-      if (!s.pulse.active && s.echoes.length === 0 && s.hintOpacity < 1) {
+      if (s.pulses.length === 0 && s.echoes.length === 0 && s.hintOpacity < 1) {
         s.hintOpacity = Math.min(1, s.hintOpacity + dt * 0.4)
       }
 
@@ -660,7 +660,7 @@ export default function UltrasoundSimulation() {
       for (const rbc of s.rbcs) {
         const vessel = s.vessels[rbc.vesselIdx]
         const pos = getVesselPoint(vessel, rbc.t)
-        const glowStrength = rbc.hit ? Math.max(0, 1 - (s.time - rbc.hitTime) * 1.2) : 0
+        const glowStrength = rbc.hitByPulses.size > 0 ? Math.max(0, 1 - (s.time - rbc.hitTime) * 1.2) : 0
 
         // Check if RBC is behind another vessel
         let behindVessel = false
@@ -734,17 +734,18 @@ export default function UltrasoundSimulation() {
         }
       }
 
-      // Pulse wavefront (no shadowBlur -- use double-stroke)
-      if (s.pulse.active && s.pulse.x > PROBE_FACE_X) {
-        ctx.globalAlpha = s.pulse.opacity * 0.3
+      // Pulse wavefronts (no shadowBlur -- use double-stroke)
+      for (const pulse of s.pulses) {
+        if (pulse.x <= PROBE_FACE_X) continue
+        ctx.globalAlpha = pulse.opacity * 0.3
         ctx.strokeStyle = "#38bdf8"
         ctx.lineWidth = PULSE_WIDTH + 8
-        ctx.beginPath(); ctx.moveTo(s.pulse.x, probeTop); ctx.lineTo(s.pulse.x, probeBot); ctx.stroke()
+        ctx.beginPath(); ctx.moveTo(pulse.x, probeTop); ctx.lineTo(pulse.x, probeBot); ctx.stroke()
 
-        ctx.globalAlpha = s.pulse.opacity
+        ctx.globalAlpha = pulse.opacity
         ctx.strokeStyle = "#38bdf8"
         ctx.lineWidth = PULSE_WIDTH
-        ctx.beginPath(); ctx.moveTo(s.pulse.x, probeTop); ctx.lineTo(s.pulse.x, probeBot); ctx.stroke()
+        ctx.beginPath(); ctx.moveTo(pulse.x, probeTop); ctx.lineTo(pulse.x, probeBot); ctx.stroke()
 
         ctx.globalAlpha = 1
       }
@@ -768,7 +769,7 @@ export default function UltrasoundSimulation() {
 
       for (let i = 0; i < NUM_ELEMENTS; i++) {
         const ey = probeTop + i * (elementH + elementGap)
-        const transmitting = s.pulse.active && s.pulse.x < faceX + 30 && s.pulse.x >= faceX - 5
+        const transmitting = s.pulses.some(p => p.x < faceX + 30 && p.x >= faceX - 5)
         const receiveGlow = s.elementActivations[i]
 
         // Separator
@@ -805,7 +806,7 @@ export default function UltrasoundSimulation() {
       }
 
       // Face edge glow per-element
-      const isTransmitting = s.pulse.active && s.pulse.x < faceX + 30
+      const isTransmitting = s.pulses.some(p => p.x < faceX + 30)
       if (isTransmitting) {
         ctx.fillStyle = "rgba(56,189,248,0.8)"
         ctx.fillRect(faceX - 1.5, probeTop, 1.5, probeH)
@@ -831,7 +832,8 @@ export default function UltrasoundSimulation() {
         ctx.textAlign = "center"
         ctx.textBaseline = "bottom"
         ctx.fillStyle = "#94a3b8"
-        ctx.fillText("Space / tap to pulse", w / 2, h - 16)
+        const isTouchDevice = "ontouchstart" in window || navigator.maxTouchPoints > 0
+        ctx.fillText(isTouchDevice ? "Tap to pulse" : "Press space to pulse", w / 2, h - 16)
         ctx.restore()
       }
 
