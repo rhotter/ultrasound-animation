@@ -187,91 +187,81 @@ export default function UltrasoundSimulation() {
 
   const buildVessels = useCallback((w: number, h: number): Vessel[] => {
     const vessels: Vessel[] = []
-    const margin = 20
-    const probeTop = h * PROBE_TOP_FRAC
-    const probeBot = h * PROBE_BOT_FRAC
-    const clampY = (y: number) =>
-      Math.max(probeTop + margin, Math.min(probeBot - margin, y))
-    const startX = PROBE_FACE_X + 20
+    const overflow = 80 // extend beyond canvas edges
 
-    // Middle cerebral artery
+    // Middle cerebral artery -- extends edge to edge
     {
       const pts: { x: number; y: number }[] = []
       const cy = h * 0.45
-      for (let i = 0; i <= 40; i++) {
-        const frac = i / 40
-        const x = startX + frac * (w - startX - 30)
-        const y = clampY(
+      for (let i = 0; i <= 50; i++) {
+        const frac = i / 50
+        const x = -overflow + frac * (w + overflow * 2)
+        const y =
           cy +
-            Math.sin(frac * Math.PI * 3) * h * 0.05 +
-            Math.cos(frac * Math.PI * 1.5) * h * 0.03
-        )
+          Math.sin(frac * Math.PI * 3) * h * 0.05 +
+          Math.cos(frac * Math.PI * 1.5) * h * 0.03
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.04, flowSpeed: 0.0003 })
     }
 
-    // Anterior cerebral artery (upper, more tortuous)
+    // Anterior cerebral artery -- extends edge to edge
     {
       const pts: { x: number; y: number }[] = []
       const cy = h * 0.22
-      for (let i = 0; i <= 35; i++) {
-        const frac = i / 35
-        const x = startX + frac * (w - startX - 30)
-        const y = clampY(
+      for (let i = 0; i <= 45; i++) {
+        const frac = i / 45
+        const x = -overflow + frac * (w + overflow * 2)
+        const y =
           cy +
-            Math.sin(frac * Math.PI * 2.3 + 0.5) * h * 0.06 +
-            Math.sin(frac * Math.PI * 5) * h * 0.015
-        )
+          Math.sin(frac * Math.PI * 2.3 + 0.5) * h * 0.06 +
+          Math.sin(frac * Math.PI * 5) * h * 0.015
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.025, flowSpeed: 0.00018 })
     }
 
-    // Posterior cerebral artery (lower)
+    // Posterior cerebral artery -- extends edge to edge
     {
       const pts: { x: number; y: number }[] = []
       const cy = h * 0.73
-      for (let i = 0; i <= 35; i++) {
-        const frac = i / 35
-        const x = startX + frac * (w - startX - 30)
-        const y = clampY(
+      for (let i = 0; i <= 45; i++) {
+        const frac = i / 45
+        const x = -overflow + frac * (w + overflow * 2)
+        const y =
           cy +
-            Math.sin(frac * Math.PI * 2.8 + 1) * h * 0.05 +
-            Math.cos(frac * Math.PI * 4.5) * h * 0.012
-        )
+          Math.sin(frac * Math.PI * 2.8 + 1) * h * 0.05 +
+          Math.cos(frac * Math.PI * 4.5) * h * 0.012
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.028, flowSpeed: 0.00022 })
     }
 
-    // Branching arteriole (ascending from middle)
+    // Branching arteriole (ascending, crosses top edge)
     {
       const pts: { x: number; y: number }[] = []
-      for (let i = 0; i <= 25; i++) {
-        const frac = i / 25
-        const x = startX + w * 0.25 + frac * (w * 0.4)
-        const y = clampY(
-          h * 0.4 -
-            frac * h * 0.18 +
-            Math.sin(frac * Math.PI * 4) * h * 0.02
-        )
+      for (let i = 0; i <= 35; i++) {
+        const frac = i / 35
+        const x = -overflow * 0.5 + w * 0.15 + frac * (w * 0.9 + overflow)
+        const y =
+          h * 0.5 -
+          frac * h * 0.45 +
+          Math.sin(frac * Math.PI * 4) * h * 0.025
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.015, flowSpeed: 0.00012 })
     }
 
-    // Branching arteriole (descending from middle)
+    // Branching arteriole (descending, crosses bottom edge)
     {
       const pts: { x: number; y: number }[] = []
-      for (let i = 0; i <= 25; i++) {
-        const frac = i / 25
-        const x = startX + w * 0.3 + frac * (w * 0.35)
-        const y = clampY(
-          h * 0.52 +
-            frac * h * 0.15 +
-            Math.sin(frac * Math.PI * 3 + 1) * h * 0.025
-        )
+      for (let i = 0; i <= 35; i++) {
+        const frac = i / 35
+        const x = -overflow * 0.5 + w * 0.2 + frac * (w * 0.85 + overflow)
+        const y =
+          h * 0.48 +
+          frac * h * 0.42 +
+          Math.sin(frac * Math.PI * 3 + 1) * h * 0.03
         pts.push({ x, y })
       }
       vessels.push({ points: pts, radius: h * 0.016, flowSpeed: 0.00015 })
@@ -720,7 +710,7 @@ export default function UltrasoundSimulation() {
         }
       }
 
-      // ─── Incident pulse wavefront ─────────────────────────────
+      // ─── Incident pulse wavefront ────────���────────────────────
       if (s.pulse.active && s.pulse.x > PROBE_FACE_X) {
         ctx.save()
         ctx.globalAlpha = s.pulse.opacity
