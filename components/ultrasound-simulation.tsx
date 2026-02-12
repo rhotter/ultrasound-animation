@@ -41,9 +41,9 @@ interface PulseWave {
 
 const WAVE_SPEED = 2.6
 const ECHO_SPEED = 2.0
-const PROBE_TOP_FRAC = 0.08
-const PROBE_BOT_FRAC = 0.92
-const PROBE_FACE_X = 60
+const PROBE_TOP_FRAC = 0.12
+const PROBE_BOT_FRAC = 0.88
+const PROBE_FACE_X = 175
 const PROBE_HOUSING_WIDTH = 32
 const PROBE_BODY_WIDTH = 46
 const PULSE_WIDTH = 3
@@ -765,44 +765,137 @@ export default function UltrasoundSimulation() {
       const housingLeft = faceX - PROBE_HOUSING_WIDTH
       const bodyLeft = housingLeft - PROBE_BODY_WIDTH
 
-      // Probe body
-      const bodyGrad = ctx.createLinearGradient(bodyLeft, 0, housingLeft, 0)
-      bodyGrad.addColorStop(0, "#0e1520")
-      bodyGrad.addColorStop(0.4, "#18273a")
-      bodyGrad.addColorStop(1, "#1a2d42")
-      ctx.fillStyle = bodyGrad
+      // Key dimensions
+      const midY = (probeTop + probeBot) / 2
+      const headTop = probeTop - 6
+      const headBot = probeBot + 6
+      const neckTop = probeTop + probeH * 0.12
+      const neckBot = probeBot - probeH * 0.12
+      const gripW = 62
+      const gripLeft = bodyLeft - gripW
+      const gripTop = midY - probeH * 0.18
+      const gripBot = midY + probeH * 0.18
+      const handleW = 50
+      const handleLeft = gripLeft - handleW
+      const handleTop = midY - probeH * 0.12
+      const handleBot = midY + probeH * 0.12
+      const cableExitX = handleLeft
 
-      const bodyTop = probeTop + probeH * 0.15
-      const bodyBot = probeBot - probeH * 0.15
+      // Cable -- extends off the left edge
+      ctx.save()
+      ctx.strokeStyle = "#0c1218"
+      ctx.lineWidth = 14
+      ctx.lineCap = "round"
       ctx.beginPath()
-      ctx.moveTo(bodyLeft, bodyTop - 10)
-      ctx.lineTo(housingLeft, probeTop - 4)
-      ctx.lineTo(housingLeft, probeBot + 4)
-      ctx.lineTo(bodyLeft, bodyBot + 10)
+      ctx.moveTo(cableExitX, midY)
+      ctx.bezierCurveTo(cableExitX - 30, midY - 8, -20, midY + 5, -40, midY)
+      ctx.stroke()
+      // Cable highlight
+      ctx.strokeStyle = "rgba(56,189,248,0.04)"
+      ctx.lineWidth = 12
+      ctx.beginPath()
+      ctx.moveTo(cableExitX, midY)
+      ctx.bezierCurveTo(cableExitX - 30, midY - 8, -20, midY + 5, -40, midY)
+      ctx.stroke()
+      ctx.lineCap = "butt"
+      ctx.restore()
+
+      // Handle (narrow cylinder furthest left)
+      const handleGrad = ctx.createLinearGradient(handleLeft, handleTop, handleLeft, handleBot)
+      handleGrad.addColorStop(0, "#10192a")
+      handleGrad.addColorStop(0.3, "#192d44")
+      handleGrad.addColorStop(0.7, "#192d44")
+      handleGrad.addColorStop(1, "#0e1822")
+      ctx.fillStyle = handleGrad
+      ctx.beginPath()
+      ctx.roundRect(handleLeft, handleTop, handleW, handleBot - handleTop, 6)
+      ctx.fill()
+      ctx.strokeStyle = "rgba(56,189,248,0.08)"
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.roundRect(handleLeft, handleTop, handleW, handleBot - handleTop, 6)
+      ctx.stroke()
+
+      // Handle grip ridges
+      ctx.strokeStyle = "rgba(56,189,248,0.06)"
+      ctx.lineWidth = 0.8
+      for (let gy = handleTop + 6; gy < handleBot - 4; gy += 5) {
+        ctx.beginPath()
+        ctx.moveTo(handleLeft + 6, gy)
+        ctx.lineTo(handleLeft + handleW - 6, gy)
+        ctx.stroke()
+      }
+
+      // Ergonomic grip section (wider, with contour)
+      const gripGrad = ctx.createLinearGradient(gripLeft, gripTop, gripLeft, gripBot)
+      gripGrad.addColorStop(0, "#0f1e30")
+      gripGrad.addColorStop(0.3, "#1a3350")
+      gripGrad.addColorStop(0.7, "#1a3350")
+      gripGrad.addColorStop(1, "#0d1a28")
+      ctx.fillStyle = gripGrad
+      ctx.beginPath()
+      ctx.moveTo(gripLeft, handleTop)
+      ctx.bezierCurveTo(gripLeft, gripTop - 8, gripLeft + gripW * 0.6, gripTop, gripLeft + gripW, neckTop)
+      ctx.lineTo(gripLeft + gripW, neckBot)
+      ctx.bezierCurveTo(gripLeft + gripW * 0.6, gripBot, gripLeft, gripBot + 8, gripLeft, handleBot)
       ctx.closePath()
       ctx.fill()
-
       ctx.strokeStyle = "rgba(56,189,248,0.1)"
       ctx.lineWidth = 1
       ctx.beginPath()
-      ctx.moveTo(bodyLeft, bodyTop - 10)
-      ctx.lineTo(housingLeft, probeTop - 4)
-      ctx.lineTo(housingLeft, probeBot + 4)
-      ctx.lineTo(bodyLeft, bodyBot + 10)
+      ctx.moveTo(gripLeft, handleTop)
+      ctx.bezierCurveTo(gripLeft, gripTop - 8, gripLeft + gripW * 0.6, gripTop, gripLeft + gripW, neckTop)
+      ctx.lineTo(gripLeft + gripW, neckBot)
+      ctx.bezierCurveTo(gripLeft + gripW * 0.6, gripBot, gripLeft, gripBot + 8, gripLeft, handleBot)
       ctx.closePath()
       ctx.stroke()
 
-      // Cable
-      ctx.strokeStyle = "rgba(56,189,248,0.07)"
-      ctx.lineWidth = 8
-      ctx.lineCap = "round"
+      // Neck -- tapers from grip to probe head
+      const neckGrad = ctx.createLinearGradient(gripLeft + gripW, 0, bodyLeft, 0)
+      neckGrad.addColorStop(0, "#152840")
+      neckGrad.addColorStop(1, "#1a2d42")
+      ctx.fillStyle = neckGrad
       ctx.beginPath()
-      ctx.moveTo(bodyLeft, (bodyTop + bodyBot) / 2)
-      ctx.lineTo(0, (bodyTop + bodyBot) / 2)
+      ctx.moveTo(gripLeft + gripW, neckTop)
+      ctx.lineTo(bodyLeft, probeTop + probeH * 0.06)
+      ctx.lineTo(bodyLeft, probeBot - probeH * 0.06)
+      ctx.lineTo(gripLeft + gripW, neckBot)
+      ctx.closePath()
+      ctx.fill()
+      ctx.strokeStyle = "rgba(56,189,248,0.08)"
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(gripLeft + gripW, neckTop)
+      ctx.lineTo(bodyLeft, probeTop + probeH * 0.06)
+      ctx.lineTo(bodyLeft, probeBot - probeH * 0.06)
+      ctx.lineTo(gripLeft + gripW, neckBot)
+      ctx.closePath()
       ctx.stroke()
-      ctx.lineCap = "butt"
 
-      // Housing block
+      // Probe head body -- widens to the element array
+      const bodyGrad = ctx.createLinearGradient(bodyLeft, 0, housingLeft, 0)
+      bodyGrad.addColorStop(0, "#14253a")
+      bodyGrad.addColorStop(0.5, "#1c3450")
+      bodyGrad.addColorStop(1, "#1a2d42")
+      ctx.fillStyle = bodyGrad
+      ctx.beginPath()
+      ctx.moveTo(bodyLeft, probeTop + probeH * 0.06)
+      ctx.lineTo(housingLeft, headTop)
+      ctx.lineTo(housingLeft, headBot)
+      ctx.lineTo(bodyLeft, probeBot - probeH * 0.06)
+      ctx.closePath()
+      ctx.fill()
+      ctx.strokeStyle = "rgba(56,189,248,0.1)"
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(bodyLeft, probeTop + probeH * 0.06)
+      ctx.lineTo(housingLeft, headTop)
+      ctx.lineTo(housingLeft, headBot)
+      ctx.lineTo(bodyLeft, probeBot - probeH * 0.06)
+      ctx.closePath()
+      ctx.stroke()
+
+      // Housing block (element array casing)
       const housingGrad = ctx.createLinearGradient(housingLeft, 0, faceX, 0)
       housingGrad.addColorStop(0, "#1a2d42")
       housingGrad.addColorStop(0.5, "#223a52")
@@ -811,21 +904,20 @@ export default function UltrasoundSimulation() {
       ctx.beginPath()
       ctx.roundRect(
         housingLeft,
-        probeTop - 4,
+        headTop,
         PROBE_HOUSING_WIDTH,
-        probeH + 8,
+        headBot - headTop,
         [2, 0, 0, 2]
       )
       ctx.fill()
-
       ctx.strokeStyle = "rgba(56,189,248,0.12)"
       ctx.lineWidth = 1
       ctx.beginPath()
       ctx.roundRect(
         housingLeft,
-        probeTop - 4,
+        headTop,
         PROBE_HOUSING_WIDTH,
-        probeH + 8,
+        headBot - headTop,
         [2, 0, 0, 2]
       )
       ctx.stroke()
@@ -965,22 +1057,22 @@ export default function UltrasoundSimulation() {
         ctx.stroke()
       }
 
-      // ─── Probe label (positioned to the right of the probe face) ──
+      // ─── Probe label ────────────────────────────────────────────
       ctx.save()
       ctx.font = "600 11px system-ui, sans-serif"
-      ctx.textAlign = "left"
+      ctx.textAlign = "center"
       ctx.textBaseline = "middle"
 
-      const labelX = faceX + 14
-      const labelY = probeTop - 18
+      const labelX = (gripLeft + bodyLeft) / 2
+      const labelY = gripTop - 22
 
-      // Leader line from probe top to label
+      // Leader line from probe grip to label
       ctx.strokeStyle = "rgba(56,189,248,0.3)"
       ctx.lineWidth = 0.8
       ctx.setLineDash([3, 2])
       ctx.beginPath()
-      ctx.moveTo(faceX + 2, probeTop)
-      ctx.lineTo(labelX - 4, labelY)
+      ctx.moveTo(labelX, gripTop - 2)
+      ctx.lineTo(labelX, labelY + 10)
       ctx.stroke()
       ctx.setLineDash([])
 
@@ -991,7 +1083,7 @@ export default function UltrasoundSimulation() {
       ctx.fillStyle = "rgba(10,8,10,0.9)"
       ctx.beginPath()
       ctx.roundRect(
-        labelX - lpx,
+        labelX - plm.width / 2 - lpx,
         labelY - 7 - lpy,
         plm.width + lpx * 2,
         14 + lpy * 2,
@@ -1002,7 +1094,7 @@ export default function UltrasoundSimulation() {
       ctx.lineWidth = 0.8
       ctx.beginPath()
       ctx.roundRect(
-        labelX - lpx,
+        labelX - plm.width / 2 - lpx,
         labelY - 7 - lpy,
         plm.width + lpx * 2,
         14 + lpy * 2,
