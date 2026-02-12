@@ -71,19 +71,11 @@ function getVesselPoint(
   }
 }
 
-// Seeded pseudo-random for consistent brain texture
-function seededRandom(seed: number) {
-  let s = seed
-  return () => {
-    s = (s * 16807 + 0) % 2147483647
-    return (s - 1) / 2147483646
-  }
-}
+
 
 export default function UltrasoundSimulation() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animFrameRef = useRef<number>(0)
-  const brainTextureRef = useRef<ImageData | null>(null)
   const stateRef = useRef<{
     vessels: Vessel[]
     rbcs: RBC[]
@@ -93,8 +85,7 @@ export default function UltrasoundSimulation() {
     initialized: boolean
     dims: { w: number; h: number }
     restartTimer: number | null
-    sulci: { x: number; y: number; angle: number; len: number; width: number }[]
-    elementActivations: number[] // per-element glow intensity (0-1), decays over time
+    elementActivations: number[]
   }>({
     vessels: [],
     rbcs: [],
@@ -104,86 +95,8 @@ export default function UltrasoundSimulation() {
     initialized: false,
     dims: { w: 0, h: 0 },
     restartTimer: null,
-    sulci: [],
     elementActivations: new Array(NUM_ELEMENTS).fill(0),
   })
-
-  // Pre-render brain tissue texture to an offscreen buffer
-  const buildBrainTexture = useCallback((w: number, h: number): ImageData => {
-    const offscreen = document.createElement("canvas")
-    offscreen.width = w
-    offscreen.height = h
-    const octx = offscreen.getContext("2d")!
-
-    // Base brain tissue -- warm pinkish-grey
-    const bgGrad = octx.createRadialGradient(
-      w * 0.5, h * 0.5, 0,
-      w * 0.5, h * 0.5, w * 0.75
-    )
-    bgGrad.addColorStop(0, "#1e1519")
-    bgGrad.addColorStop(0.4, "#181216")
-    bgGrad.addColorStop(0.7, "#130e12")
-    bgGrad.addColorStop(1, "#0d090c")
-    octx.fillStyle = bgGrad
-    octx.fillRect(0, 0, w, h)
-
-    // Cortical fold patterns (gyri & sulci)
-    const rng = seededRandom(42)
-    octx.lineCap = "round"
-    for (let i = 0; i < 18; i++) {
-      const startX = PROBE_FACE_X + 30 + rng() * (w - PROBE_FACE_X - 80)
-      const startY = rng() * h
-      const angle = rng() * Math.PI * 2
-      const len = 60 + rng() * 160
-
-      // Dark sulcus line
-      octx.strokeStyle = `rgba(8,5,7,${0.3 + rng() * 0.25})`
-      octx.lineWidth = 2 + rng() * 4
-      octx.beginPath()
-      let cx = startX, cy = startY
-      octx.moveTo(cx, cy)
-      const segs = 6 + Math.floor(rng() * 6)
-      for (let j = 0; j < segs; j++) {
-        const segLen = len / segs
-        const curve = (rng() - 0.5) * 60
-        cx += Math.cos(angle + (rng() - 0.5) * 0.8) * segLen
-        cy += Math.sin(angle + (rng() - 0.5) * 0.8) * segLen
-        octx.quadraticCurveTo(
-          cx + Math.cos(angle + Math.PI / 2) * curve,
-          cy + Math.sin(angle + Math.PI / 2) * curve,
-          cx, cy
-        )
-      }
-      octx.stroke()
-
-      // Lighter gyrus edge beside it
-      octx.strokeStyle = `rgba(45,30,38,${0.15 + rng() * 0.15})`
-      octx.lineWidth = 1
-      octx.beginPath()
-      cx = startX + (rng() - 0.5) * 4
-      cy = startY + (rng() - 0.5) * 4
-      octx.moveTo(cx, cy)
-      for (let j = 0; j < segs; j++) {
-        const segLen = len / segs
-        cx += Math.cos(angle + (rng() - 0.5) * 0.8) * segLen
-        cy += Math.sin(angle + (rng() - 0.5) * 0.8) * segLen
-        octx.lineTo(cx, cy)
-      }
-      octx.stroke()
-    }
-
-    // Fine tissue grain
-    const imgData = octx.getImageData(0, 0, w, h)
-    const data = imgData.data
-    for (let i = 0; i < data.length; i += 4) {
-      const noise = (rng() - 0.5) * 8
-      data[i] = Math.max(0, Math.min(255, data[i] + noise))
-      data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + noise * 0.8))
-      data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + noise * 0.9))
-    }
-
-    return imgData
-  }, [])
 
   const buildVessels = useCallback((w: number, h: number): Vessel[] => {
     const vessels: Vessel[] = []
@@ -329,22 +242,6 @@ export default function UltrasoundSimulation() {
     return rbcs
   }, [])
 
-  // Build sulci data for gentle animation
-  const buildSulci = useCallback((w: number, h: number) => {
-    const rng = seededRandom(99)
-    const sulci: { x: number; y: number; angle: number; len: number; width: number }[] = []
-    for (let i = 0; i < 12; i++) {
-      sulci.push({
-        x: PROBE_FACE_X + 50 + rng() * (w - PROBE_FACE_X - 100),
-        y: rng() * h,
-        angle: rng() * Math.PI * 2,
-        len: 40 + rng() * 120,
-        width: 1.5 + rng() * 3,
-      })
-    }
-    return sulci
-  }, [])
-
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -366,16 +263,10 @@ export default function UltrasoundSimulation() {
 
       s.vessels = buildVessels(w, h)
       s.rbcs = buildRBCs()
-      s.sulci = buildSulci(w, h)
       s.echoes = []
       s.pulse = { x: PROBE_FACE_X, opacity: 1, active: true }
       s.time = 0
       s.initialized = true
-
-      brainTextureRef.current = buildBrainTexture(
-        Math.round(rect.width * dpr),
-        Math.round(rect.height * dpr)
-      )
     }
 
     resize()
@@ -491,35 +382,8 @@ export default function UltrasoundSimulation() {
 
       // ─── DRAW ──────────────────────────────────────────────────
 
-      // Brain tissue background (pre-rendered texture)
-      if (brainTextureRef.current) {
-        ctx.putImageData(brainTextureRef.current, 0, 0)
-        // Scale back since putImageData ignores transforms
-        ctx.save()
-        ctx.setTransform(1, 0, 0, 1, 0, 0)
-        ctx.restore()
-      } else {
-        ctx.fillStyle = "#130e12"
-        ctx.fillRect(0, 0, w, h)
-      }
-
-      // Animated cortical shimmer (very subtle pulsing glow over sulci)
-      const shimmer = Math.sin(s.time * 0.4) * 0.03 + 0.03
-      ctx.save()
-      ctx.globalAlpha = shimmer
-      ctx.lineCap = "round"
-      for (const sulcus of s.sulci) {
-        ctx.strokeStyle = "rgba(60,35,45,1)"
-        ctx.lineWidth = sulcus.width
-        ctx.beginPath()
-        ctx.moveTo(sulcus.x, sulcus.y)
-        ctx.lineTo(
-          sulcus.x + Math.cos(sulcus.angle) * sulcus.len,
-          sulcus.y + Math.sin(sulcus.angle) * sulcus.len
-        )
-        ctx.stroke()
-      }
-      ctx.restore()
+      ctx.fillStyle = "#0a0a0f"
+      ctx.fillRect(0, 0, w, h)
 
       // ─── Draw vessels (cerebral vasculature) ───────────────────
       for (const vessel of s.vessels) {
