@@ -949,22 +949,22 @@ export default function UltrasoundSimulation() {
         ctx.stroke()
       }
 
-      // ─── Probe label ──────────────────────────────────────────
+      // ─── Probe label (positioned to the right of the probe face) ──
       ctx.save()
       ctx.font = "600 11px system-ui, sans-serif"
-      ctx.fillStyle = "rgba(56,189,248,0.85)"
-      ctx.textAlign = "center"
+      ctx.textAlign = "left"
       ctx.textBaseline = "middle"
 
-      const labelX = (bodyLeft + housingLeft) / 2
-      const labelY = probeTop - 30
+      const labelX = faceX + 14
+      const labelY = probeTop - 18
 
+      // Leader line from probe top to label
       ctx.strokeStyle = "rgba(56,189,248,0.3)"
       ctx.lineWidth = 0.8
       ctx.setLineDash([3, 2])
       ctx.beginPath()
-      ctx.moveTo(labelX, probeTop - 6)
-      ctx.lineTo(labelX, labelY + 12)
+      ctx.moveTo(faceX + 2, probeTop)
+      ctx.lineTo(labelX - 4, labelY)
       ctx.stroke()
       ctx.setLineDash([])
 
@@ -975,7 +975,7 @@ export default function UltrasoundSimulation() {
       ctx.fillStyle = "rgba(10,8,10,0.9)"
       ctx.beginPath()
       ctx.roundRect(
-        labelX - plm.width / 2 - lpx,
+        labelX - lpx,
         labelY - 7 - lpy,
         plm.width + lpx * 2,
         14 + lpy * 2,
@@ -986,7 +986,7 @@ export default function UltrasoundSimulation() {
       ctx.lineWidth = 0.8
       ctx.beginPath()
       ctx.roundRect(
-        labelX - plm.width / 2 - lpx,
+        labelX - lpx,
         labelY - 7 - lpy,
         plm.width + lpx * 2,
         14 + lpy * 2,
