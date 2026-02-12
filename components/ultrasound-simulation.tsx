@@ -577,7 +577,7 @@ export default function UltrasoundSimulation() {
           const eCenterY = probeTop + i * (elementGap + elementH) + elementH / 2
           const dy = echo.cy - eCenterY
           const distToElement = Math.sqrt(dx * dx + dy * dy)
-          if (Math.abs(echo.radius - distToElement) < 2) {
+          if (distToElement <= echo.radius && distToElement > echo.radius - WAVE_SPEED) {
             s.elementActivations[i] = Math.min(4, s.elementActivations[i] + 0.6)
           }
         }
