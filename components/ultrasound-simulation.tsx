@@ -600,7 +600,8 @@ export default function UltrasoundSimulation() {
           if (rbc.hitByPulses.has(pulse.id)) continue
           const pos = getVesselPoint(s.vessels[rbc.vesselIdx], rbc.t)
           if (pos.x >= SKULL_RIGHT + rbc.size && pos.x <= w && pos.y >= 0 && pos.y <= h &&
-              pos.y >= probeTop && pos.y <= probeBot && pulse.x >= pos.x - rbc.size) {
+              pos.y >= probeTop && pos.y <= probeBot &&
+              pulse.x >= pos.x - rbc.size && pulse.x <= pos.x + rbc.size + WAVE_SPEED * 2) {
             rbc.hitByPulses.add(pulse.id)
             rbc.hitTime = s.time
             if (s.echoes.length < MAX_ECHOES) {
