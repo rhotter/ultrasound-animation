@@ -473,19 +473,24 @@ export default function UltrasoundSimulation() {
     ctx.font = "600 11px system-ui, sans-serif"
     ctx.textAlign = "center"; ctx.textBaseline = "middle"
     const labelX = (gripLeft + bodyLeft) / 2
-    const labelY = gripTop - 22
+    const lineH = 14
+    const labelY = gripTop - 32
     ctx.strokeStyle = "rgba(56,189,248,0.3)"; ctx.lineWidth = 0.8
     ctx.setLineDash([3, 2])
-    ctx.beginPath(); ctx.moveTo(labelX, gripTop - 2); ctx.lineTo(labelX, labelY + 10); ctx.stroke()
+    ctx.beginPath(); ctx.moveTo(labelX, gripTop - 2); ctx.lineTo(labelX, labelY + lineH + 10); ctx.stroke()
     ctx.setLineDash([])
-    const probeLabel = "Ultrasound Transducer"
-    const plm = ctx.measureText(probeLabel)
+    const line1 = "Ultrasound"
+    const line2 = "Transducer"
+    const plm1 = ctx.measureText(line1)
+    const plm2 = ctx.measureText(line2)
+    const boxW = Math.max(plm1.width, plm2.width) + 16
     ctx.fillStyle = "rgba(10,8,10,0.9)"
-    ctx.beginPath(); ctx.roundRect(labelX - plm.width / 2 - 8, labelY - 11, plm.width + 16, 22, 3); ctx.fill()
+    ctx.beginPath(); ctx.roundRect(labelX - boxW / 2, labelY - 11, boxW, 22 + lineH, 3); ctx.fill()
     ctx.strokeStyle = "rgba(56,189,248,0.35)"; ctx.lineWidth = 0.8
-    ctx.beginPath(); ctx.roundRect(labelX - plm.width / 2 - 8, labelY - 11, plm.width + 16, 22, 3); ctx.stroke()
+    ctx.beginPath(); ctx.roundRect(labelX - boxW / 2, labelY - 11, boxW, 22 + lineH, 3); ctx.stroke()
     ctx.fillStyle = "rgba(56,189,248,0.85)"
-    ctx.fillText(probeLabel, labelX, labelY)
+    ctx.fillText(line1, labelX, labelY)
+    ctx.fillText(line2, labelX, labelY + lineH)
     ctx.restore()
     }
 
